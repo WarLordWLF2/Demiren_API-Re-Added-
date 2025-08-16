@@ -276,37 +276,37 @@ class Admin_Functions
         include 'connection.php';
 
         $sql = "SELECT 
-                b.reference_no,
-                b.booking_id,             
-                c.customers_id,           
-                CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
-                b.guests_amnt,
-                b.booking_downpayment,
-                b.booking_checkin_dateandtime,
-                b.booking_checkout_dateandtime,
-                b.booking_created_at,
+                    b.reference_no,
+                    b.booking_id,             
+                    c.customers_id,           
+                    CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
+                    b.guests_amnt,
+                    b.booking_downpayment,
+                    b.booking_checkin_dateandtime,
+                    b.booking_checkout_dateandtime,
+                    b.booking_created_at,
 
-                GROUP_CONCAT(r.roomnumber_id ORDER BY r.roomnumber_id ASC) AS room_ids,
-                GROUP_CONCAT(rt.roomtype_id ORDER BY r.roomnumber_id ASC) AS roomtype_ids,
-                GROUP_CONCAT(rt.roomtype_name ORDER BY r.roomnumber_id ASC) AS roomtype_names,
-                GROUP_CONCAT(st.status_name ORDER BY r.roomnumber_id ASC) AS statuses
+                    GROUP_CONCAT(r.roomnumber_id ORDER BY r.roomnumber_id ASC) AS room_ids,
+                    GROUP_CONCAT(rt.roomtype_id ORDER BY r.roomnumber_id ASC) AS roomtype_ids,
+                    GROUP_CONCAT(rt.roomtype_name ORDER BY r.roomnumber_id ASC) AS roomtype_names,
+                    GROUP_CONCAT(st.status_name ORDER BY r.roomnumber_id ASC) AS statuses
 
-            FROM tbl_booking_room AS br
-            JOIN tbl_booking AS b 
-                ON br.booking_id = b.booking_id
-            JOIN tbl_customers AS c 
-                ON b.customers_id = c.customers_id
-            JOIN tbl_customers_online AS co 
-                ON c.customers_online_id = co.customers_online_id
-            JOIN tbl_roomtype AS rt
-                ON br.roomtype_id = rt.roomtype_id
-            JOIN tbl_rooms AS r
-                ON br.roomnumber_id = r.roomnumber_id
-            JOIN tbl_status_types AS st
-                ON r.room_status_id = st.status_id
-            WHERE st.status_name = 'Pending'
-            GROUP BY b.reference_no
-            ORDER BY b.booking_created_at DESC";
+                FROM tbl_booking_room AS br
+                JOIN tbl_booking AS b 
+                    ON br.booking_id = b.booking_id
+                JOIN tbl_customers AS c 
+                    ON b.customers_id = c.customers_id
+                JOIN tbl_customers_online AS co 
+                    ON c.customers_online_id = co.customers_online_id
+                JOIN tbl_roomtype AS rt
+                    ON br.roomtype_id = rt.roomtype_id
+                JOIN tbl_rooms AS r
+                    ON br.roomnumber_id = r.roomnumber_id
+                JOIN tbl_status_types AS st
+                    ON r.room_status_id = st.status_id
+                WHERE st.status_name = 'Pending'
+                GROUP BY b.reference_no
+                ORDER BY b.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->execute();
@@ -336,7 +336,6 @@ class Admin_Functions
 
         echo json_encode($requests);
     }
-
 
     function approveCustomerBooking($data)
     {
@@ -396,6 +395,63 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
+
+    // This is for Customer Side, just putting here to test
+    function countAvailableRooms()
+    {
+        include "connection.php"; // assumes $conn is your PDO connection
+
+        $sql = "SELECT 
+                    rt.roomtype_name,
+                    COALESCE(v.vacant_rooms, 0) AS vacant_rooms,
+                    COALESCE(b.total_booked, 0) AS total_booked,
+                    (COALESCE(v.vacant_rooms, 0) - COALESCE(b.total_booked, 0)) AS available_rooms
+                FROM 
+                    tbl_roomtype rt
+                LEFT JOIN (
+                    SELECT 
+                        r.roomtype_id,
+                        COUNT(*) AS vacant_rooms
+                    FROM 
+                        tbl_rooms r
+                    INNER JOIN tbl_status_types st 
+                        ON r.room_status_id = st.status_id
+                    WHERE 
+                        st.status_name = 'Vacant'
+                    GROUP BY 
+                        r.roomtype_id
+                ) v ON rt.roomtype_id = v.roomtype_id
+                LEFT JOIN (
+                    SELECT 
+                        br.roomtype_id,
+                        COUNT(*) AS total_booked
+                    FROM 
+                        tbl_booking_room br
+                    GROUP BY 
+                        br.roomtype_id
+                ) b ON rt.roomtype_id = b.roomtype_id
+                ORDER BY 
+                    rt.roomtype_name";
+
+        try {
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Always force JSON response
+            return json_encode([
+                "success" => true,
+                "data" => $result ?? []
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (PDOException $e) {
+            // Always JSON even on error
+            return json_encode([
+                "success" => false,
+                "message" => $e->getMessage()
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+    }
+
 
 
 
@@ -1246,6 +1302,10 @@ switch ($methodType) {
 
     case "changeStatus":
         echo $AdminClass->change_bookStatus($jsonData);
+        break;
+
+    case "countAvailableRooms":
+        echo $AdminClass->countAvailableRooms();
         break;
 
     case "reqAvailRooms":
