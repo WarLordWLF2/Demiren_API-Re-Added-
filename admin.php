@@ -102,26 +102,31 @@ class Admin_Functions
         include 'connection.php';
 
         $sql = "SELECT 
-                b.reference_no AS 'Ref No',
+                b.booking_id,
+                b.reference_no,
                 COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
-                        CONCAT( nbw.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS 'Name',
-                b.booking_checkin_dateandtime AS 'Check-in',
-                b.booking_checkout_dateandtime AS 'Check-out',
-                GROUP_CONCAT(DISTINCT rt.roomtype_name SEPARATOR ', ') AS 'Room Type',
-                'Pending' AS 'Status'
+                         CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                b.guests_amnt,
+                b.booking_downpayment,
+                b.booking_checkin_dateandtime,
+                b.booking_checkout_dateandtime,
+                GROUP_CONCAT(DISTINCT rt.roomtype_name ORDER BY rt.roomtype_name SEPARATOR ', ') AS room_types,
+                GROUP_CONCAT(DISTINCT r.roomnumber_id ORDER BY r.roomnumber_id SEPARATOR ', ') AS room_numbers,
+                CASE
+                    WHEN CURDATE() < DATE(b.booking_checkin_dateandtime) THEN 'Upcoming'
+                    WHEN CURDATE() BETWEEN DATE(b.booking_checkin_dateandtime) AND DATE(b.booking_checkout_dateandtime) THEN 'Active'
+                    WHEN CURDATE() > DATE(b.booking_checkout_dateandtime) THEN 'Completed'
+                    ELSE 'Unknown'
+                END AS booking_status
             FROM 
                 tbl_booking b
             LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
             LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
             LEFT JOIN tbl_booking_room br ON b.booking_id = br.booking_id
-            LEFT JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
-            WHERE 
-                b.booking_id NOT IN (
-                    SELECT booking_id
-                    FROM tbl_booking_history
-                    WHERE status_id IN (1, 2, 3)
-                )
-            GROUP BY b.reference_no;";
+            LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+            LEFT JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
+            GROUP BY b.booking_id
+            ORDER BY b.booking_id DESC;";
 
         $stmt = $conn->prepare($sql);
         $stmt->execute();
@@ -178,6 +183,23 @@ class Admin_Functions
             echo json_encode($nationalities);
         } catch (PDOException $e) {
             return false; // Or you could echo json_encode([]) if you want an empty array
+        }
+    }
+
+    function getAllStatus()
+    {
+        include 'connection.php';
+
+        try {
+            $sql = "SELECT * FROM tbl_status_types";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+
+            $statuses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode($statuses);
+        } catch (PDOException $e) {
+            return false; 
         }
     }
 
@@ -341,9 +363,8 @@ class Admin_Functions
     {
         include 'connection.php';
 
-        $data = json_decode($_POST['json'], true);
         $bookingId = $data['booking_id'];
-        $adminId = $data['admin_id']; // Track who approved
+        // $adminId = $data['admin_id']; // Track who approved
         $roomIds = $data['room_ids']; // Pass from frontend when approving
 
         try {
@@ -380,12 +401,12 @@ class Admin_Functions
             }
 
             // 4️⃣ Insert into tbl_booking_history
-            $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, action, action_by, action_date)
-                       VALUES (:booking_id, 'Approved Booking', :admin_id, NOW())";
+            $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
+                       VALUES (:booking_id, :admin_id, 1, NOW())";
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
-                ':admin_id' => $adminId
+                ':admin_id' => 1
             ]);
 
             $conn->commit();
@@ -396,63 +417,125 @@ class Admin_Functions
         }
     }
 
-    // This is for Customer Side, just putting here to test
-    function countAvailableRooms()
+    function declineCustomerBooking($data)
     {
-        include "connection.php"; // assumes $conn is your PDO connection
+        include 'connection.php';
 
-        $sql = "SELECT 
-                    rt.roomtype_name,
-                    COALESCE(v.vacant_rooms, 0) AS vacant_rooms,
-                    COALESCE(b.total_booked, 0) AS total_booked,
-                    (COALESCE(v.vacant_rooms, 0) - COALESCE(b.total_booked, 0)) AS available_rooms
-                FROM 
-                    tbl_roomtype rt
-                LEFT JOIN (
-                    SELECT 
-                        r.roomtype_id,
-                        COUNT(*) AS vacant_rooms
-                    FROM 
-                        tbl_rooms r
-                    INNER JOIN tbl_status_types st 
-                        ON r.room_status_id = st.status_id
-                    WHERE 
-                        st.status_name = 'Vacant'
-                    GROUP BY 
-                        r.roomtype_id
-                ) v ON rt.roomtype_id = v.roomtype_id
-                LEFT JOIN (
-                    SELECT 
-                        br.roomtype_id,
-                        COUNT(*) AS total_booked
-                    FROM 
-                        tbl_booking_room br
-                    GROUP BY 
-                        br.roomtype_id
-                ) b ON rt.roomtype_id = b.roomtype_id
-                ORDER BY 
-                    rt.roomtype_name";
+        $bookingId = $data['booking_id'];
+        $adminId = $data['admin_id']; // Track who declined
+        $roomIds = $data['room_ids']; // Pass from frontend when declining
 
         try {
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $conn->beginTransaction();
 
-            // Always force JSON response
-            return json_encode([
-                "success" => true,
-                "data" => $result ?? []
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        } catch (PDOException $e) {
-            // Always JSON even on error
-            return json_encode([
-                "success" => false,
-                "message" => $e->getMessage()
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            // 1️⃣ Get "Vacant" status_id
+            $sqlStatus = "SELECT status_id FROM tbl_status_types WHERE status_name = 'Vacant' LIMIT 1";
+            $statusId = $conn->query($sqlStatus)->fetchColumn();
+            if (!$statusId) {
+                throw new Exception("Status 'Vacant' not found.");
+            }
+
+            // 2️⃣ Update each room status back to Vacant
+            $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
+            $stmtUpdate = $conn->prepare($sqlUpdateRoom);
+            foreach ($roomIds as $roomId) {
+                $stmtUpdate->execute([
+                    ':status_id' => $statusId,
+                    ':room_id' => $roomId
+                ]);
+            }
+
+            // 3️⃣ Remove booking-room associations
+            $sqlDeleteBookingRoom = "DELETE FROM tbl_booking_room WHERE booking_id = :booking_id";
+            $stmtDelete = $conn->prepare($sqlDeleteBookingRoom);
+            $stmtDelete->execute([':booking_id' => $bookingId]);
+
+            // 4️⃣ Insert into tbl_booking_history
+            $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
+                       VALUES (:booking_id, :admin_id, 2, NOW())";
+            $stmtHistory = $conn->prepare($sqlHistory);
+            $stmtHistory->execute([
+                ':booking_id' => $bookingId,
+                ':admin_id' => $adminId
+            ]);
+
+            $conn->commit();
+            echo json_encode(["success" => true, "message" => "Booking declined successfully."]);
+        } catch (Exception $e) {
+            $conn->rollBack();
+            echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
 
+    // This is for Customer Side, just putting here to test
+    function countAvailableRooms()
+    {
+        include "connection.php";
 
+        try {
+            $debugStmt = $conn->prepare("DESCRIBE tbl_booking");
+            $debugStmt->execute();
+            $columns = $debugStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $sql = "SELECT 
+                        rt.roomtype_name,
+                        COALESCE(r.total_rooms, 0) AS total_rooms,
+                        COALESCE(b.total_requested, 0) AS total_requested,
+                        (COALESCE(r.total_rooms, 0) - COALESCE(b.total_requested, 0)) AS available_rooms
+                    FROM 
+                        tbl_roomtype rt
+                    LEFT JOIN (
+                        -- Physical rooms count
+                        SELECT 
+                            roomtype_id,
+                            COUNT(*) AS total_rooms
+                        FROM 
+                            tbl_rooms
+                        GROUP BY 
+                            roomtype_id
+                    ) r ON rt.roomtype_id = r.roomtype_id
+                    LEFT JOIN (
+                        -- Requested rooms (only for non-archived bookings)
+                        SELECT 
+                            br.roomtype_id,
+                            COUNT(*) AS total_requested
+                        FROM 
+                            tbl_booking_room br
+                        JOIN tbl_booking b 
+                        ON br.booking_id = b.booking_id
+                        AND b.booking_isArchive = 0
+                        GROUP BY 
+                            br.roomtype_id
+                    ) b ON rt.roomtype_id = b.roomtype_id
+                    ORDER BY 
+                        rt.roomtype_name;";
+
+            try {
+                $stmt = $conn->prepare($sql);
+                $stmt->execute();
+                $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $resultCount = count($result);
+
+                return json_encode([
+                    "success" => true,
+                    "data" => $result ?? []
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            } catch (PDOException $e) {
+                // Always JSON even on error
+                return json_encode([
+                    "success" => false,
+                    "message" => $e->getMessage()
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+        } catch (PDOException $e) {
+            // If DESCRIBE fails, return error
+            return json_encode([
+                "success" => false,
+                "message" => "Failed to describe table: " . $e->getMessage()
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }
+    }
 
 
     // ------------------------------------------------------- Payment Functions ------------------------------------------------------- //
@@ -1246,16 +1329,22 @@ switch ($methodType) {
         break;
 
     // --------------------------------- Approving Customer Bookings --------------------------------- //
+    // WalkIn
+    case "finalizeBooking":
+        echo $AdminClass->insertWalkInBooking($jsonData);
+        break;
+        
+    // Online
     case "reqBookingList":
         $AdminClass->customerBookingReqs();
         break;
 
-    case "finalizeBooking":
-        echo $AdminClass->insertWalkInBooking($jsonData);
+    case "approveCustomerBooking":
+        $AdminClass->approveCustomerBooking($jsonData);
         break;
 
-    case "approveOnlineCust":
-        $AdminClass->approveCustomerBooking($jsonData);
+    case "declineCustomerBooking":
+        $AdminClass->declineCustomerBooking($jsonData);
         break;
 
     // --------------------------------- For Billings and Invoices --------------------------------- //
@@ -1304,6 +1393,7 @@ switch ($methodType) {
         echo $AdminClass->change_bookStatus($jsonData);
         break;
 
+    // THis should reflect to customer booking page
     case "countAvailableRooms":
         echo $AdminClass->countAvailableRooms();
         break;
@@ -1319,6 +1409,10 @@ switch ($methodType) {
     // Room Management or Something?
     case "view_rooms":
         echo $AdminClass->viewAvailRooms();
+        break;
+
+    case "getAllStatus":
+        echo $AdminClass->getAllStatus();
         break;
 
     // --------------------------------- Master Files Manager --------------------------------- //

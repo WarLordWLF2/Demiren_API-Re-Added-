@@ -1,6 +1,6 @@
 <?php
 $host = 'localhost';
-$dbname = 'db_demiren_v3';
+$dbname = 'db_ni_sabel';
 $user = 'root';
 $pass = '';
 
