@@ -297,48 +297,62 @@ class Admin_Functions
     {
         include 'connection.php';
 
-        // Fetch online bookings awaiting room assignment
         $sql = "SELECT 
                     b.reference_no,
-                    b.booking_id,
-                    c.customers_id,
+                    b.booking_id,             
+                    c.customers_id,           
                     CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
                     b.guests_amnt,
                     b.booking_downpayment,
                     b.booking_checkin_dateandtime,
                     b.booking_checkout_dateandtime,
                     b.booking_created_at,
-                    GROUP_CONCAT(br.roomtype_id ORDER BY br.booking_room_id ASC) AS roomtype_ids,
-                    GROUP_CONCAT(rt.roomtype_name ORDER BY br.booking_room_id ASC) AS roomtype_names
-                FROM tbl_booking b
-                JOIN tbl_customers c ON b.customers_id = c.customers_id
-                JOIN tbl_customers_online co ON c.customers_online_id = co.customers_online_id
-                JOIN tbl_booking_room br ON br.booking_id = b.booking_id
-                JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
-                WHERE br.roomnumber_id IS NULL
-                GROUP BY b.booking_id
+
+                    GROUP_CONCAT(r.roomnumber_id ORDER BY r.roomnumber_id ASC) AS room_ids,
+                    GROUP_CONCAT(rt.roomtype_id ORDER BY r.roomnumber_id ASC) AS roomtype_ids,
+                    GROUP_CONCAT(rt.roomtype_name ORDER BY r.roomnumber_id ASC) AS roomtype_names,
+                    GROUP_CONCAT(st.status_name ORDER BY r.roomnumber_id ASC) AS statuses
+
+                FROM tbl_booking_room AS br
+                JOIN tbl_booking AS b 
+                    ON br.booking_id = b.booking_id
+                JOIN tbl_customers AS c 
+                    ON b.customers_id = c.customers_id
+                JOIN tbl_customers_online AS co 
+                    ON c.customers_online_id = co.customers_online_id
+                JOIN tbl_roomtype AS rt
+                    ON br.roomtype_id = rt.roomtype_id
+                JOIN tbl_rooms AS r
+                    ON br.roomnumber_id = r.roomnumber_id
+                JOIN tbl_status_types AS st
+                    ON r.room_status_id = st.status_id
+                WHERE st.status_name = 'Pending'
+                GROUP BY b.reference_no
                 ORDER BY b.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Build rooms from requested room types; assignment pending
+        // Transform comma-separated strings into a rooms array
         foreach ($requests as &$req) {
-            $roomTypeIds = isset($req['roomtype_ids']) ? explode(',', $req['roomtype_ids']) : [];
-            $roomTypeNames = isset($req['roomtype_names']) ? explode(',', $req['roomtype_names']) : [];
+            $roomIds = explode(',', $req['room_ids']);
+            $roomTypeIds = explode(',', $req['roomtype_ids']);
+            $roomTypeNames = explode(',', $req['roomtype_names']);
+            $statuses = explode(',', $req['statuses']);
 
             $rooms = [];
-            for ($i = 0; $i < count($roomTypeIds); $i++) {
+            for ($i = 0; $i < count($roomIds); $i++) {
                 $rooms[] = [
-                    'roomnumber_id' => null,
+                    'roomnumber_id' => $roomIds[$i],
                     'roomtype_id'   => $roomTypeIds[$i],
                     'roomtype_name' => $roomTypeNames[$i],
-                    'status_name'   => 'Pending'
+                    'status_name'   => $statuses[$i]
                 ];
             }
 
-            unset($req['roomtype_ids'], $req['roomtype_names']);
+            // Replace original fields with the new rooms array
+            unset($req['room_ids'], $req['roomtype_ids'], $req['roomtype_names'], $req['statuses']);
             $req['rooms'] = $rooms;
         }
 
@@ -348,53 +362,53 @@ class Admin_Functions
     function approveCustomerBooking($data)
     {
         include 'connection.php';
-    
+
         $bookingId = $data['booking_id'];
-        $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = 1; // placeholder
-    
+        // $adminId = $data['admin_id']; // Track who approved
+        $roomIds = $data['room_ids']; // Pass from frontend when approving
+
         try {
             $conn->beginTransaction();
-    
-            // 1️⃣ Get "Occupied" status_id for rooms
+
+            // 1️⃣ Get "Occupied" status_id
             $sqlStatus = "SELECT status_id FROM tbl_status_types WHERE status_name = 'Occupied' LIMIT 1";
             $statusId = $conn->query($sqlStatus)->fetchColumn();
             if (!$statusId) {
                 throw new Exception("Status 'Occupied' not found.");
             }
-    
-            // 2️⃣ Insert into tbl_booking_room
+
+            // 2️⃣ Insert into tbl_booking_room if missing
             $sqlInsertBookingRoom = "INSERT IGNORE INTO tbl_booking_room (booking_id, roomnumber_id, roomtype_id)
-                                     SELECT :booking_id, r.roomnumber_id, r.roomtype_id
-                                     FROM tbl_rooms r
-                                     WHERE r.roomnumber_id = :room_id";
+                                 SELECT :booking_id, r.roomnumber_id, r.roomtype_id
+                                 FROM tbl_rooms r
+                                 WHERE r.roomnumber_id = :room_id";
             $stmtInsert = $conn->prepare($sqlInsertBookingRoom);
             foreach ($roomIds as $roomId) {
                 $stmtInsert->execute([
                     ':booking_id' => $bookingId,
-                    ':room_id'    => $roomId
+                    ':room_id' => $roomId
                 ]);
             }
-    
-            // 3️⃣ Update room statuses to Occupied
+
+            // 3️⃣ Update each room status
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdate = $conn->prepare($sqlUpdateRoom);
             foreach ($roomIds as $roomId) {
                 $stmtUpdate->execute([
                     ':status_id' => $statusId,
-                    ':room_id'   => $roomId
+                    ':room_id' => $roomId
                 ]);
             }
-    
-            // 4️⃣ Insert booking history (Approved = 1)
+
+            // 4️⃣ Insert into tbl_booking_history
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                           VALUES (:booking_id, :admin_id, 1, NOW())";
+                       VALUES (:booking_id, :admin_id, 1, NOW())";
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
-                ':admin_id'   => $adminId
+                ':admin_id' => 1
             ]);
-    
+
             $conn->commit();
             echo json_encode(["success" => true, "message" => "Booking approved successfully."]);
         } catch (Exception $e) {
@@ -402,54 +416,49 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
-    
+
     function declineCustomerBooking($data)
     {
         include 'connection.php';
-    
+
         $bookingId = $data['booking_id'];
-        $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = 1; // placeholder
-    
+        $adminId = $data['admin_id']; // Track who declined
+        $roomIds = $data['room_ids']; // Pass from frontend when declining
+
         try {
             $conn->beginTransaction();
-    
+
             // 1️⃣ Get "Vacant" status_id
             $sqlStatus = "SELECT status_id FROM tbl_status_types WHERE status_name = 'Vacant' LIMIT 1";
             $statusId = $conn->query($sqlStatus)->fetchColumn();
             if (!$statusId) {
                 throw new Exception("Status 'Vacant' not found.");
             }
-    
-            // 2️⃣ Update room statuses back to Vacant
+
+            // 2️⃣ Update each room status back to Vacant
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdate = $conn->prepare($sqlUpdateRoom);
             foreach ($roomIds as $roomId) {
                 $stmtUpdate->execute([
                     ':status_id' => $statusId,
-                    ':room_id'   => $roomId
+                    ':room_id' => $roomId
                 ]);
             }
-    
+
             // 3️⃣ Remove booking-room associations
             $sqlDeleteBookingRoom = "DELETE FROM tbl_booking_room WHERE booking_id = :booking_id";
             $stmtDelete = $conn->prepare($sqlDeleteBookingRoom);
             $stmtDelete->execute([':booking_id' => $bookingId]);
-    
-            // 4️⃣ Insert booking history (Declined = 2)
+
+            // 4️⃣ Insert into tbl_booking_history
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                           VALUES (:booking_id, :admin_id, 2, NOW())";
+                       VALUES (:booking_id, :admin_id, 2, NOW())";
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
-                ':admin_id'   => $adminId
+                ':admin_id' => $adminId
             ]);
-    
-            // 5️⃣ Mark booking as archived
-            $sqlArchive = "UPDATE tbl_booking SET booking_isArchive = 1 WHERE booking_id = :booking_id";
-            $stmtArchive = $conn->prepare($sqlArchive);
-            $stmtArchive->execute([':booking_id' => $bookingId]);
-    
+
             $conn->commit();
             echo json_encode(["success" => true, "message" => "Booking declined successfully."]);
         } catch (Exception $e) {
@@ -457,7 +466,6 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
-    
 
     // This is for Customer Side, just putting here to test
     function countAvailableRooms()
