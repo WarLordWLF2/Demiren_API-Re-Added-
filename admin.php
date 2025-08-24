@@ -351,7 +351,7 @@ class Admin_Functions
     
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = 1; // placeholder
+        $adminId   = $data['admin_id']; // placeholder
     
         try {
             $conn->beginTransaction();
@@ -386,9 +386,9 @@ class Admin_Functions
                 ]);
             }
     
-            // 4️⃣ Insert booking history (Approved = 1)
+            // 4️⃣ Insert booking history (Approved = 2)
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                           VALUES (:booking_id, :admin_id, 1, NOW())";
+                           VALUES (:booking_id, :admin_id, 2, NOW())";
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
@@ -409,7 +409,7 @@ class Admin_Functions
     
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = 1; // placeholder
+        $adminId   = $data['admin_id']; // placeholder
     
         try {
             $conn->beginTransaction();
@@ -436,9 +436,9 @@ class Admin_Functions
             $stmtDelete = $conn->prepare($sqlDeleteBookingRoom);
             $stmtDelete->execute([':booking_id' => $bookingId]);
     
-            // 4️⃣ Insert booking history (Declined = 2)
+            // 4️⃣ Insert booking history (Declined = 3)
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                           VALUES (:booking_id, :admin_id, 2, NOW())";
+                           VALUES (:booking_id, :admin_id, 3, NOW())";
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
@@ -1475,3 +1475,8 @@ switch ($methodType) {
         echo $AdminClass->remove_RoomTypes($jsonData);
         break;
 }
+
+
+// Needs fixing/update
+// 1. approveCustomerBooking and declineCustomerBooking need to upgrade their way of calling status
+// - Situation: PK of each status might get switched up
