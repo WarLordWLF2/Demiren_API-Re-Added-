@@ -11,10 +11,30 @@ class Admin_Functions
     {
         include "connection.php";
 
-        $sql = "";
+        // Only allow login for Admins (userlevel_id = 1)
+        $sql = "SELECT employee_id, employee_fname, employee_lname, employee_username, employee_email
+                FROM tbl_employee
+                WHERE employee_user_level_id = 1
+                  AND employee_email = :email
+                  AND employee_password = :password
+                LIMIT 1";
         $stmt = $conn->prepare($sql);
-        $stmt->bindParam(":email", $data[""]);
-        $stmt->bindParam(":password", $data[""]);
+        $stmt->bindParam(":email", $data["email"]);
+        $stmt->bindParam(":password", $data["password"]);
+        $stmt->execute();
+        $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($admin) {
+            return json_encode([
+                "success" => true,
+                "admin" => $admin
+            ]);
+        } else {
+            return json_encode([
+                "success" => false,
+                "message" => "Invalid credentials or not an admin."
+            ]);
+        }
     }
 
     // Rooms
@@ -102,31 +122,30 @@ class Admin_Functions
         include 'connection.php';
 
         $sql = "SELECT 
-                b.booking_id,
-                b.reference_no,
-                COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
-                         CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
-                b.guests_amnt,
-                b.booking_downpayment,
-                b.booking_checkin_dateandtime,
-                b.booking_checkout_dateandtime,
-                GROUP_CONCAT(DISTINCT rt.roomtype_name ORDER BY rt.roomtype_name SEPARATOR ', ') AS room_types,
-                GROUP_CONCAT(DISTINCT r.roomnumber_id ORDER BY r.roomnumber_id SEPARATOR ', ') AS room_numbers,
-                CASE
-                    WHEN CURDATE() < DATE(b.booking_checkin_dateandtime) THEN 'Upcoming'
-                    WHEN CURDATE() BETWEEN DATE(b.booking_checkin_dateandtime) AND DATE(b.booking_checkout_dateandtime) THEN 'Active'
-                    WHEN CURDATE() > DATE(b.booking_checkout_dateandtime) THEN 'Completed'
-                    ELSE 'Unknown'
-                END AS booking_status
-            FROM 
-                tbl_booking b
-            LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-            LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
-            LEFT JOIN tbl_booking_room br ON b.booking_id = br.booking_id
-            LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
-            LEFT JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
-            GROUP BY b.booking_id
-            ORDER BY b.booking_id DESC;";
+                    b.reference_no,
+                    b.booking_id,
+                    COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                             CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                    b.booking_checkin_dateandtime,
+                    b.booking_checkout_dateandtime,
+                    GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS room_numbers,
+                    COALESCE(bs.booking_status_name, 'Pending') AS booking_status
+                FROM tbl_booking b
+                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                LEFT JOIN tbl_booking_room br ON b.booking_id = br.booking_id
+                LEFT JOIN (
+                    SELECT bh.booking_id, bs.booking_status_name
+                    FROM tbl_booking_history bh
+                    INNER JOIN tbl_booking_status bs ON bh.status_id = bs.booking_status_id
+                    WHERE bh.status_book_id IN (
+                        SELECT MAX(status_book_id)
+                        FROM tbl_booking_history
+                        GROUP BY booking_id
+                    )
+                ) bs ON bs.booking_id = b.booking_id
+                GROUP BY b.booking_id
+                ORDER BY b.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->execute();
@@ -199,18 +218,18 @@ class Admin_Functions
 
             echo json_encode($statuses);
         } catch (PDOException $e) {
-            return false; 
+            return false;
         }
     }
 
     function insertWalkInBooking($data)
     {
-        include 'connection.php'; // $conn is PDO
+        include 'connection.php';
 
         try {
             $conn->beginTransaction();
 
-            // 1. Insert into tbl_customer_identification if present
+            // 1. Insert customer identification if provided
             $identificationId = null;
             if (!empty($data['identification_id'])) {
                 $stmt = $conn->prepare("INSERT INTO tbl_customer_identification (customer_identification_attachment_filename) VALUES (:filename)");
@@ -220,8 +239,8 @@ class Admin_Functions
 
             // 2. Insert into tbl_customers
             $stmt = $conn->prepare("INSERT INTO tbl_customers 
-            (nationality_id, identification_id, customers_fname, customers_lname, customers_email, customers_phone_number, customers_date_of_birth)
-            VALUES (:nationality_id, :identification_id, :fname, :lname, :email, :phone, :dob)");
+                (nationality_id, identification_id, customers_fname, customers_lname, customers_email, customers_phone_number, customers_date_of_birth)
+                VALUES (:nationality_id, :identification_id, :fname, :lname, :email, :phone, :dob)");
             $stmt->execute([
                 ':nationality_id' => $data['nationality_id'],
                 ':identification_id' => $identificationId,
@@ -235,8 +254,8 @@ class Admin_Functions
 
             // 3. Insert into tbl_customers_walk_in
             $stmt = $conn->prepare("INSERT INTO tbl_customers_walk_in 
-            (customers_id, customers_walk_in_fname, customers_walk_in_lname, customers_walk_in_phone_number, customers_walk_in_email, customers_walk_in_address)
-            VALUES (:customers_id, :fname, :lname, :phone, :email, :address)");
+                (customers_id, customers_walk_in_fname, customers_walk_in_lname, customers_walk_in_phone_number, customers_walk_in_email, customers_walk_in_address)
+                VALUES (:customers_id, :fname, :lname, :phone, :email, :address)");
             $stmt->execute([
                 ':customers_id' => $customerId,
                 ':fname' => $data['customers_fname'],
@@ -249,46 +268,53 @@ class Admin_Functions
 
             // 4. Insert into tbl_booking
             $stmt = $conn->prepare("INSERT INTO tbl_booking
-            (customers_id, customers_walk_in_id, guests_amnt, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at)
-            VALUES (:customers_id, :walkin_id, :guests, :downpayment, :ref_no, :checkin, :checkout, NOW())");
+                (customers_id, customers_walk_in_id, adult, children, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
+                VALUES (:customers_id, :walkin_id, :adult, :children, :guests, :total_amount, :downpayment, :ref_no, :checkin, :checkout, NOW(), 0)");
             $stmt->execute([
                 ':customers_id' => $customerId,
                 ':walkin_id' => $walkInId,
-                ':guests' => $data['guests'],
-                ':downpayment' => $data['billing']['total'],
-                ':ref_no' => $data['payment']['referenceNumber'] ?? null,
-                ':checkin' => $data['checkIn'],
-                ':checkout' => $data['checkOut']
+                ':adult' => $data['adult'] ?? 1,
+                ':children' => $data['children'] ?? 0,
+                ':guests' => $data['guests_amnt'],
+                ':total_amount' => $data['booking_totalAmount'],
+                ':downpayment' => $data['booking_downpayment'],
+                ':ref_no' => $data['reference_no'],
+                ':checkin' => $data['booking_checkin_dateandtime'],
+                ':checkout' => $data['booking_checkout_dateandtime']
             ]);
             $bookingId = $conn->lastInsertId();
 
-            // 5. Insert into tbl_booking_history (Occupied status = 1 from your status list)
+            // 5. Insert booking history (status_id = 2 for Approved)
             $stmt = $conn->prepare("INSERT INTO tbl_booking_history
-            (booking_id, employee_id, status_id, updated_at)
-            VALUES (:booking_id, 1, 1, NOW())");
-            $stmt->execute([':booking_id' => $bookingId]);
+                (booking_id, employee_id, status_id, updated_at)
+                VALUES (:booking_id, :employee_id, :status_id, NOW())");
+            $stmt->execute([
+                ':booking_id' => $bookingId,
+                ':employee_id' => $data['employee_id'] ?? 1,
+                ':status_id' => 2 // Approved
+            ]);
 
-            // 6 & 7. Loop through rooms, insert into tbl_booking_room and set status to Occupied
+            // 6. Assign rooms and update their status to Occupied
             foreach ($data['selectedRooms'] as $room) {
                 // Insert into tbl_booking_room
                 $stmt = $conn->prepare("INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id)
-                VALUES (:booking_id, :roomtype_id, :roomnumber_id)");
+                    VALUES (:booking_id, :roomtype_id, :roomnumber_id)");
                 $stmt->execute([
                     ':booking_id' => $bookingId,
-                    ':roomtype_id' => $room['id'], // Adjust if roomtype_id is different from id
-                    ':roomnumber_id' => $room['id']
+                    ':roomtype_id' => $room['roomtype_id'],
+                    ':roomnumber_id' => $room['roomnumber_id']
                 ]);
 
                 // Update room status to Occupied (status_id = 1)
                 $stmt = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 1 WHERE roomnumber_id = :room_id");
-                $stmt->execute([':room_id' => $room['id']]);
+                $stmt->execute([':room_id' => $room['roomnumber_id']]);
             }
 
             $conn->commit();
-            echo json_encode(['status' => 'success', 'message' => 'Walk-in booking inserted successfully.']);
+            return json_encode(['status' => 'success', 'message' => 'Walk-in booking inserted successfully.']);
         } catch (Exception $e) {
             $conn->rollBack();
-            echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+            return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
         }
     }
 
@@ -297,7 +323,7 @@ class Admin_Functions
     {
         include 'connection.php';
 
-        // Fetch online bookings awaiting room assignment
+        // Only show bookings whose latest status is "Pending"
         $sql = "SELECT 
                     b.reference_no,
                     b.booking_id,
@@ -309,13 +335,25 @@ class Admin_Functions
                     b.booking_checkout_dateandtime,
                     b.booking_created_at,
                     GROUP_CONCAT(br.roomtype_id ORDER BY br.booking_room_id ASC) AS roomtype_ids,
-                    GROUP_CONCAT(rt.roomtype_name ORDER BY br.booking_room_id ASC) AS roomtype_names
+                    GROUP_CONCAT(rt.roomtype_name ORDER BY br.booking_room_id ASC) AS roomtype_names,
+                    GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS roomnumber_ids,
+                    COALESCE(bs.booking_status_name, 'Pending') AS booking_status
                 FROM tbl_booking b
                 JOIN tbl_customers c ON b.customers_id = c.customers_id
                 JOIN tbl_customers_online co ON c.customers_online_id = co.customers_online_id
                 JOIN tbl_booking_room br ON br.booking_id = b.booking_id
                 JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
-                WHERE br.roomnumber_id IS NULL
+                LEFT JOIN (
+                    SELECT bh.booking_id, bs.booking_status_name
+                    FROM tbl_booking_history bh
+                    INNER JOIN tbl_booking_status bs ON bh.status_id = bs.booking_status_id
+                    WHERE bh.status_book_id IN (
+                        SELECT MAX(status_book_id)
+                        FROM tbl_booking_history
+                        GROUP BY booking_id
+                    )
+                ) bs ON bs.booking_id = b.booking_id
+                WHERE COALESCE(bs.booking_status_name, 'Pending') = 'Pending'
                 GROUP BY b.booking_id
                 ORDER BY b.booking_created_at DESC";
 
@@ -323,22 +361,36 @@ class Admin_Functions
         $stmt->execute();
         $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Build rooms from requested room types; assignment pending
         foreach ($requests as &$req) {
             $roomTypeIds = isset($req['roomtype_ids']) ? explode(',', $req['roomtype_ids']) : [];
             $roomTypeNames = isset($req['roomtype_names']) ? explode(',', $req['roomtype_names']) : [];
+            $roomNumberIds = isset($req['roomnumber_ids']) ? explode(',', $req['roomnumber_ids']) : [];
 
             $rooms = [];
             for ($i = 0; $i < count($roomTypeIds); $i++) {
+                $roomnumber_id = $roomNumberIds[$i] ?? null;
+                $status_name = 'Pending';
+
+                if ($roomnumber_id) {
+                    // Fetch the room status from tbl_rooms
+                    $roomStmt = $conn->prepare("SELECT st.status_name FROM tbl_rooms r INNER JOIN tbl_status_types st ON r.room_status_id = st.status_id WHERE r.roomnumber_id = :roomnumber_id");
+                    $roomStmt->bindParam(':roomnumber_id', $roomnumber_id);
+                    $roomStmt->execute();
+                    $roomStatus = $roomStmt->fetchColumn();
+                    if ($roomStatus) {
+                        $status_name = $roomStatus;
+                    }
+                }
+
                 $rooms[] = [
-                    'roomnumber_id' => null,
+                    'roomnumber_id' => $roomnumber_id,
                     'roomtype_id'   => $roomTypeIds[$i],
                     'roomtype_name' => $roomTypeNames[$i],
-                    'status_name'   => 'Pending'
+                    'status_name'   => $status_name
                 ];
             }
 
-            unset($req['roomtype_ids'], $req['roomtype_names']);
+            unset($req['roomtype_ids'], $req['roomtype_names'], $req['roomnumber_ids']);
             $req['rooms'] = $rooms;
         }
 
@@ -348,21 +400,21 @@ class Admin_Functions
     function approveCustomerBooking($data)
     {
         include 'connection.php';
-    
+
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
         $adminId   = $data['admin_id']; // placeholder
-    
+
         try {
             $conn->beginTransaction();
-    
+
             // 1️⃣ Get "Occupied" status_id for rooms
             $sqlStatus = "SELECT status_id FROM tbl_status_types WHERE status_name = 'Occupied' LIMIT 1";
             $statusId = $conn->query($sqlStatus)->fetchColumn();
             if (!$statusId) {
                 throw new Exception("Status 'Occupied' not found.");
             }
-    
+
             // 2️⃣ Insert into tbl_booking_room
             $sqlInsertBookingRoom = "INSERT IGNORE INTO tbl_booking_room (booking_id, roomnumber_id, roomtype_id)
                                      SELECT :booking_id, r.roomnumber_id, r.roomtype_id
@@ -375,7 +427,7 @@ class Admin_Functions
                     ':room_id'    => $roomId
                 ]);
             }
-    
+
             // 3️⃣ Update room statuses to Occupied
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdate = $conn->prepare($sqlUpdateRoom);
@@ -385,7 +437,7 @@ class Admin_Functions
                     ':room_id'   => $roomId
                 ]);
             }
-    
+
             // 4️⃣ Insert booking history (Approved = 2)
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
                            VALUES (:booking_id, :admin_id, 2, NOW())";
@@ -394,7 +446,7 @@ class Admin_Functions
                 ':booking_id' => $bookingId,
                 ':admin_id'   => $adminId
             ]);
-    
+
             $conn->commit();
             echo json_encode(["success" => true, "message" => "Booking approved successfully."]);
         } catch (Exception $e) {
@@ -402,25 +454,25 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
-    
+
     function declineCustomerBooking($data)
     {
         include 'connection.php';
-    
+
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
         $adminId   = $data['admin_id']; // placeholder
-    
+
         try {
             $conn->beginTransaction();
-    
+
             // 1️⃣ Get "Vacant" status_id
             $sqlStatus = "SELECT status_id FROM tbl_status_types WHERE status_name = 'Vacant' LIMIT 1";
             $statusId = $conn->query($sqlStatus)->fetchColumn();
             if (!$statusId) {
                 throw new Exception("Status 'Vacant' not found.");
             }
-    
+
             // 2️⃣ Update room statuses back to Vacant
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdate = $conn->prepare($sqlUpdateRoom);
@@ -430,12 +482,12 @@ class Admin_Functions
                     ':room_id'   => $roomId
                 ]);
             }
-    
+
             // 3️⃣ Remove booking-room associations
             $sqlDeleteBookingRoom = "DELETE FROM tbl_booking_room WHERE booking_id = :booking_id";
             $stmtDelete = $conn->prepare($sqlDeleteBookingRoom);
             $stmtDelete->execute([':booking_id' => $bookingId]);
-    
+
             // 4️⃣ Insert booking history (Declined = 3)
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
                            VALUES (:booking_id, :admin_id, 3, NOW())";
@@ -444,12 +496,12 @@ class Admin_Functions
                 ':booking_id' => $bookingId,
                 ':admin_id'   => $adminId
             ]);
-    
+
             // 5️⃣ Mark booking as archived
             $sqlArchive = "UPDATE tbl_booking SET booking_isArchive = 1 WHERE booking_id = :booking_id";
             $stmtArchive = $conn->prepare($sqlArchive);
             $stmtArchive->execute([':booking_id' => $bookingId]);
-    
+
             $conn->commit();
             echo json_encode(["success" => true, "message" => "Booking declined successfully."]);
         } catch (Exception $e) {
@@ -457,7 +509,7 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
-    
+
 
     // This is for Customer Side, just putting here to test
     function countAvailableRooms()
@@ -1299,11 +1351,17 @@ switch ($methodType) {
         break;
 
     // --------------------------------- Approving Customer Bookings --------------------------------- //
+
+    // View All Bookings
+    case "viewBookings":
+        echo $AdminClass->viewBookingList();
+        break;
+
     // WalkIn
     case "finalizeBooking":
         echo $AdminClass->insertWalkInBooking($jsonData);
         break;
-        
+
     // Online
     case "reqBookingList":
         $AdminClass->customerBookingReqs();
@@ -1353,10 +1411,6 @@ switch ($methodType) {
 
     case "viewCustomers":
         echo json_encode(["message" => "Successfully Retrieved Data"]);
-        break;
-
-    case "viewBookings":
-        echo $AdminClass->viewBookingList();
         break;
 
     case "changeStatus":
