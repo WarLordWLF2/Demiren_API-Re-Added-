@@ -1,6 +1,6 @@
 <?php
 $host = 'localhost';
-$dbname = 'db_ni_sabel';
+$dbname = 'sample_test_demiren';
 $user = 'root';
 $pass = '';
 

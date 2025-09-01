@@ -255,6 +255,7 @@ class Demiren_customer
         return $stmt->rowCount() > 0 ? 1 : 0;
     }
 
+    // New Method
     function customerBookingNoAccount($json)
     {
         include "connection.php";
@@ -280,9 +281,9 @@ class Demiren_customer
             // Insert booking
             $stmt = $conn->prepare("
                 INSERT INTO tbl_booking 
-                    (customers_id, customers_walk_in_id, booking_status_id, booking_downpayment, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at) 
+                    (customers_id, customers_walk_in_id, booking_downpayment, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at) 
                 VALUES 
-                    (NULL, :customers_walk_in_id, 2, :booking_downpayment, :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW())
+                    (NULL, :customers_walk_in_id, :booking_downpayment, :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW())
             ");
             $stmt->bindParam(":customers_walk_in_id", $walkInCustomerId);
             $stmt->bindParam(":booking_downpayment", $json["booking_downpayment"]);
@@ -315,36 +316,143 @@ class Demiren_customer
         }
     }
 
+    // Old Method
+    // function customerBookingNoAccount($json)
+    // {
+    //     include "connection.php";
+    //     $json = json_decode($json, true);
+
+    //     try {
+    //         $conn->beginTransaction();
+
+    //         // Insert walk-in customer
+    //         $stmt = $conn->prepare("
+    //             INSERT INTO tbl_customers_walk_in 
+    //                 (customers_walk_in_fname, customers_walk_in_lname, customers_walk_in_email, customers_walk_in_phone_number) 
+    //             VALUES 
+    //                 (:customers_walk_in_fname, :customers_walk_in_lname, :customers_walk_in_email, :customers_walk_in_phone_number)
+    //         ");
+    //         $stmt->bindParam(":customers_walk_in_fname", $json["customers_walk_in_fname"]);
+    //         $stmt->bindParam(":customers_walk_in_lname", $json["customers_walk_in_lname"]);
+    //         $stmt->bindParam(":customers_walk_in_email", $json["customers_walk_in_email"]);
+    //         $stmt->bindParam(":customers_walk_in_phone_number", $json["customers_walk_in_phone_number"]);
+    //         $stmt->execute();
+    //         $walkInCustomerId = $conn->lastInsertId();
+
+    //         // Insert booking
+    //         $stmt = $conn->prepare("
+    //             INSERT INTO tbl_booking 
+    //                 (customers_id, customers_walk_in_id, booking_status_id, booking_downpayment, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at) 
+    //             VALUES 
+    //                 (NULL, :customers_walk_in_id, 2, :booking_downpayment, :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW())
+    //         ");
+    //         $stmt->bindParam(":customers_walk_in_id", $walkInCustomerId);
+    //         $stmt->bindParam(":booking_downpayment", $json["booking_downpayment"]);
+    //         $stmt->bindParam(":booking_checkin_dateandtime", $json["booking_checkin_dateandtime"]);
+    //         $stmt->bindParam(":booking_checkout_dateandtime", $json["booking_checkout_dateandtime"]);
+    //         $stmt->execute();
+    //         $bookingId = $conn->lastInsertId();
+
+    //         // Insert into tbl_booking_room based on room quantity
+    //         $roomtype_id = $json["roomtype_id"];
+    //         $room_count = intval($json["room_count"]);
+
+    //         for ($i = 0; $i < $room_count; $i++) {
+    //             $stmt = $conn->prepare("
+    //                 INSERT INTO tbl_booking_room 
+    //                     (booking_id, roomtype_id, roomnumber_id) 
+    //                 VALUES 
+    //                     (:booking_id, :roomtype_id, NULL)
+    //             ");
+    //             $stmt->bindParam(":booking_id", $bookingId);
+    //             $stmt->bindParam(":roomtype_id", $roomtype_id);
+    //             $stmt->execute();
+    //         }
+
+    //         $conn->commit();
+    //         return 1;
+    //     } catch (PDOException $e) {
+    //         $conn->rollBack();
+    //         return 0;
+    //     }
+    // }
+
     function customerViewBookings($json)
     {
         include "connection.php";
         $json = json_decode($json, true);
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
 
-        $sql = "SELECT 
-                    a.roomtype_name,
-                    e.roomnumber_id,
-                    c.booking_downpayment,
-                    e.room_beds,
-                    e.room_sizes,
-                    c.booking_created_at,
-                    d.booking_status_name,
-                    c.booking_checkin_dateandtime,
-                    c.booking_checkout_dateandtime
-                FROM tbl_roomtype AS a
-                INNER JOIN tbl_booking_room AS b ON b.roomtype_id = a.roomtype_id
-                INNER JOIN tbl_booking AS c ON c.booking_id = b.booking_id
-                INNER JOIN tbl_booking_status AS d ON d.booking_status_id = c.booking_status_id
-                INNER JOIN tbl_rooms AS e ON e.roomtype_id = a.roomtype_id
-                WHERE c.customers_id = :bookingCustomerId OR c.customers_walk_in_id = :bookingCustomerId";
+        $sql = "SELECT a.*, b.*, c.*, d.*
+            FROM tbl_booking a
+            INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
+            INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
+            INNER JOIN tbl_rooms d ON d.roomtype_id = c.roomtype_id
+            WHERE 
+                (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
+                AND a.booking_id NOT IN (
+                    SELECT booking_id 
+                    FROM tbl_booking_history 
+                    WHERE booking_id = a.booking_id
+                )
+            ORDER BY a.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
         $stmt->execute();
-        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $bookings = [];
+
+        // echo json_encode($rows);
+        // die();
+
+        foreach ($rows as $row) {
+            $bookingId = $row['booking_id'];
+
+            if (!isset($bookings[$bookingId])) {
+                $bookings[$bookingId] = [
+                    "booking_id" => $row['booking_id'],
+                    "booking_totalAmount" => $row['booking_totalAmount'],
+                    "customers_id" => $row['customers_id'],
+                    "customers_walk_in_id" => $row['customers_walk_in_id'],
+                    "adult" => $row['adult'],
+                    "children" => $row['children'],
+                    "guests_amnt" => $row['guests_amnt'],
+                    "booking_totalAmount" => $row['booking_totalAmount'],
+                    "booking_downpayment" => $row['booking_downpayment'],
+                    "reference_no" => $row['reference_no'],
+                    "booking_checkin_dateandtime" => $row['booking_checkin_dateandtime'],
+                    "booking_checkout_dateandtime" => $row['booking_checkout_dateandtime'],
+                    "booking_created_at" => $row['booking_created_at'],
+                    "booking_isArchive" => $row['booking_isArchive'],
+                    "roomsList" => []
+                ];
+            }
+
+            $bookings[$bookingId]['roomsList'][] = [
+                "booking_room_id" => $row['booking_room_id'],
+                "roomtype_id" => $row['roomtype_id'],
+                "roomtype_name" => $row['roomtype_name'],
+                "max_capacity" => $row['max_capacity'],
+                "roomtype_description" => $row['roomtype_description'],
+                "roomtype_price" => $row['roomtype_price'],
+                "roomnumber_id" => $row['roomnumber_id'],
+                "roomfloor" => $row['roomfloor'],
+                "room_status_id" => $row['room_status_id'],
+                "room_capacity" => $row['room_capacity'],
+                "room_beds" => $row['room_beds'],
+                "room_sizes" => $row['room_sizes']
+            ];
+        }
+
+        // Return as an indexed array
+        return array_values($bookings);
     }
+
     function customerCurrentBookingsWithAccount($json)
     {
+        // {"booking_customer_id": 1}
         include "connection.php";
         $json = json_decode($json, true);
 
@@ -361,11 +469,12 @@ class Demiren_customer
                 c.booking_checkin_dateandtime,
                 c.booking_checkout_dateandtime
             FROM tbl_roomtype AS a
-            INNER JOIN tbl_booking_room AS b ON b.roomtype_id = a.roomtype_id
-            INNER JOIN tbl_booking AS c ON c.booking_id = b.booking_id
-            INNER JOIN tbl_booking_status AS d ON d.booking_status_id = c.booking_status_id
-            INNER JOIN tbl_rooms AS e ON e.roomtype_id = a.roomtype_id
-            WHERE c.customers_id = :bookingCustomerId AND c.booking_status_id IN (1, 2) LIMIT 1";
+            LEFT JOIN tbl_booking_room AS b ON b.roomtype_id = a.roomtype_id
+            LEFT JOIN tbl_booking AS c ON c.booking_id = b.booking_id
+            LEFT JOIN tbl_rooms AS e ON e.roomtype_id = a.roomtype_id
+            LEFT JOIN tbl_booking_history AS f ON f.booking_id = c.booking_id
+            LEFT JOIN tbl_booking_status AS d ON d.booking_status_id = f.status_id
+            WHERE c.customers_id = :bookingCustomerId AND f.status_id IN (1, 2)";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
@@ -428,7 +537,7 @@ class Demiren_customer
     {
         include "connection.php";
         $json = json_decode($json, true);
-        $sql = "UPDATE tbl_booking SET booking_status_id = 3 WHERE booking_id = :booking_id";
+        $sql = "INSERT INTO tbl_booking_history (booking_id, status_id) VALUES (:booking_id, 4)";
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(":booking_id", $json["booking_id"]);
         $stmt->execute();
@@ -515,20 +624,22 @@ class Demiren_customer
         include "connection.php";
 
         $sql = "SELECT b.roomtype_id AS room_type,
+        b.max_capacity,
         b.roomtype_description,
         b.roomtype_name, 
         GROUP_CONCAT(DISTINCT a.imagesroommaster_filename) AS images,
         b.roomtype_price, 
         GROUP_CONCAT(DISTINCT c.roomnumber_id) AS room_ids,
-        GROUP_CONCAT(DISTINCT CONCAT('Floor:', c.roomfloor, ' Beds:', c.room_beds)) AS room_details,
-        GROUP_CONCAT(DISTINCT e.room_amenities_master_name) AS amenities,
+        GROUP_CONCAT(DISTINCT  c.room_beds) AS room_beds,
+        GROUP_CONCAT(DISTINCT c.room_capacity) AS room_capacity,
+        GROUP_CONCAT(DISTINCT c.room_sizes) AS room_sizes,
+        -- GROUP_CONCAT(DISTINCT e.room_amenities_master_name) AS amenities,
         f.status_name,
         f.status_id
         FROM tbl_roomtype b
         LEFT JOIN tbl_imagesroommaster a ON a.roomtype_id = b.roomtype_id
         LEFT JOIN tbl_rooms c ON b.roomtype_id = c.roomtype_id
-        LEFT JOIN tbl_amenity_roomtype d ON b.roomtype_id = d.roomtype_id
-        LEFT JOIN tbl_room_amenities_master e ON d.room_amenities_master = e.room_amenities_master_id
+        -- LEFT JOIN tbl_room_amenities_master e ON d.room_amenities_master = e.room_amenities_master_id
         LEFT JOIN tbl_status_types f ON f.status_id = c.room_status_id
         GROUP BY b.roomtype_id, b.roomtype_name, b.roomtype_price
         ";
@@ -551,68 +662,271 @@ class Demiren_customer
         $stmt->execute();
         return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
     }
+
+    function getAllNationalities()
+    {
+        include 'connection.php';
+
+        try {
+            $sql = "SELECT nationality_id, nationality_name FROM tbl_nationality ORDER BY nationality_name ASC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            echo json_encode([
+                "success" => true,
+                "data" => $result
+            ]);
+        } catch (PDOException $e) {
+            echo json_encode([
+                "success" => false,
+                "message" => $e->getMessage()
+            ]);
+        }
+    }
+
+    function checkAndSendOTP($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+
+        try {
+            // 1. Check if email already exists in tbl_customers (with online account)
+            $sql = "SELECT c.customers_id 
+                    FROM tbl_customers c
+                    WHERE c.customers_email = :email 
+                    AND c.customers_online_id IS NOT NULL 
+                    LIMIT 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":email", $data["guest_email"]);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+                return json_encode([
+                    "success" => false,
+                    "message" => "Email already registered as an online customer."
+                ]);
+            }
+
+            // 2. Also check tbl_customers_online (in case of direct registration record)
+            $sql = "SELECT customers_online_id 
+                    FROM tbl_customers_online 
+                    WHERE customers_online_username = :email 
+                    LIMIT 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":email", $data["guest_email"]);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+                return json_encode([
+                    "success" => false,
+                    "message" => "Email already exists in online accounts."
+                ]);
+            }
+
+            // 3. Generate OTP (6-digit)
+            $otp = str_pad(rand(0, 999999), 6, "0", STR_PAD_LEFT);
+
+            // 4. Expiration time (5 minutes from now)
+            $expiration = date("Y-m-d H:i:s", strtotime("+5 minutes"));
+
+            // 5. Clean expired OTPs
+            $stmt = $conn->prepare("
+            DELETE FROM tbl_customer_otp 
+            WHERE guest_email = :email 
+              AND expiration_date < NOW()
+        ");
+            $stmt->bindParam(":email", $data["guest_email"]);
+            $stmt->execute();
+
+            // 6. Insert new OTP
+            $stmt = $conn->prepare("INSERT INTO tbl_customer_otp 
+                                        (guest_email, otp_code, expiration_date, attempts, locked_until)
+                                    VALUES 
+                                        (:email, :otp, :expiration, 0, NULL)");
+            $stmt->bindParam(":email", $data["guest_email"]);
+            $stmt->bindParam(":otp", $otp);
+            $stmt->bindParam(":expiration", $expiration);
+            $stmt->execute();
+
+            return json_encode([
+                "success" => true,
+                "message" => "OTP generated successfully.",
+                "otp" => $otp // ⚠️ return only for testing, remove later when email sending is ready
+            ]);
+        } catch (PDOException $e) {
+            return json_encode([
+                "success" => false,
+                "message" => $e->getMessage()
+            ]);
+        }
+    }
+
     function customerRegistration($json)
     {
         include "connection.php";
         $json = json_decode($json, true);
 
+        // 🔹 Normalize frontend keys → backend format
+        $json['customer_username'] = $json['username'] ?? null;
+        $json['customers_email'] = $json['email'] ?? null;
+        $json['customers_online_password'] = $json['password'] ?? null;
+        $json['customers_fname'] = $json['firstName'] ?? null;
+        $json['customers_lname'] = $json['lastName'] ?? null;
+        $json['nationality_id'] = $json['nationality'] ?? null;
+        $json['customers_date_of_birth'] = $json['dob'] ?? null;
+
+        // 🔹 Optional fields (default = null)
+        $json['customers_online_profile_image'] = $json['customers_online_profile_image'] ?? null;
+        $json['customer_identification_attachment_filename'] = $json['customer_identification_attachment_filename'] ?? null;
+        $json['customers_phone_number'] = $json['customers_phone_number'] ?? null;
+
         try {
             $conn->beginTransaction();
 
+            // 1. Check if email exists in tbl_customers
+            $stmt = $conn->prepare("SELECT customers_id 
+                                FROM tbl_customers 
+                                WHERE customers_email = :customers_email 
+                                  AND customers_online_id IS NOT NULL 
+                                LIMIT 1");
+            $stmt->bindParam(':customers_email', $json['customers_email']);
+            $stmt->execute();
+            if ($stmt->fetch()) {
+                $conn->rollBack();
+                return json_encode([
+                    "success" => false,
+                    "error"   => "EMAIL_EXISTS",
+                    "message" => "This email already exists as an online customer."
+                ]);
+            }
 
+            // 2. Check duplicate account in tbl_customers_online
+            $stmt = $conn->prepare("SELECT customers_online_id 
+                                FROM tbl_customers_online 
+                                WHERE customers_online_username = :customers_email 
+                                LIMIT 1");
+            $stmt->bindParam(':customers_email', $json['customers_email']);
+            $stmt->execute();
+            if ($stmt->fetch()) {
+                $conn->rollBack();
+                return json_encode([
+                    "success" => false,
+                    "error"   => "EMAIL_EXISTS_ONLINE",
+                    "message" => "This email is already registered in tbl_customers_online."
+                ]);
+            }
+
+            // 3. Verify OTP
             $stmt = $conn->prepare("
-                INSERT INTO tbl_customers_online (
-                    customers_online_username, 
-                    customers_online_password, 
-                    customers_online_profile_image,
-                    customers_online_authentication_status
-                ) VALUES (
-                    :customers_online_username, 
-                    :customers_online_password, 
-                    :customers_online_profile_image,
-                    0
-                )
-            ");
-            $stmt->bindParam(':customers_online_username', $json['customers_online_username']);
-            $stmt->bindParam(':customers_online_password', $json['customers_online_password']);
+            SELECT customer_otp_id, otp_code, expiration_date, attempts, locked_until
+            FROM tbl_customer_otp 
+            WHERE guest_email = :guest_email 
+            ORDER BY customer_otp_id DESC LIMIT 1
+        ");
+            $stmt->bindParam(':guest_email', $json['customers_email']);
+            $stmt->execute();
+            $otpRow = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$otpRow) {
+                $conn->rollBack();
+                return json_encode(["success" => false, "error" => "OTP_NOT_FOUND", "message" => "No OTP found."]);
+            }
+
+            // 🔒 Locked check
+            if ($otpRow['locked_until'] && $otpRow['locked_until'] > date('Y-m-d H:i:s')) {
+                $conn->rollBack();
+                return json_encode(["success" => false, "error" => "OTP_LOCKED", "message" => "Too many failed attempts. Try again later."]);
+            }
+
+            // ⏰ Expired OTP
+            if ($otpRow['expiration_date'] < date('Y-m-d H:i:s')) {
+                $stmt = $conn->prepare("DELETE FROM tbl_customer_otp WHERE customer_otp_id = :otp_id");
+                $stmt->bindParam(':otp_id', $otpRow['customer_otp_id']);
+                $stmt->execute();
+                $conn->rollBack();
+                return json_encode(["success" => false, "error" => "OTP_EXPIRED", "message" => "OTP expired."]);
+            }
+
+            // ❌ Incorrect OTP
+            if ($json['otp_code'] !== $otpRow['otp_code']) {
+                if ($otpRow['attempts'] + 1 >= 5) {
+                    $stmt = $conn->prepare("
+                    UPDATE tbl_customer_otp 
+                    SET attempts = attempts + 1, locked_until = DATE_ADD(NOW(), INTERVAL 1 HOUR)
+                    WHERE customer_otp_id = :otp_id
+                ");
+                } else {
+                    $stmt = $conn->prepare("UPDATE tbl_customer_otp SET attempts = attempts + 1 WHERE customer_otp_id = :otp_id");
+                }
+                $stmt->bindParam(':otp_id', $otpRow['customer_otp_id']);
+                $stmt->execute();
+                $conn->rollBack();
+                return json_encode(["success" => false, "error" => "OTP_INCORRECT", "message" => "Incorrect OTP."]);
+            }
+
+            // ✅ OTP correct → delete after use
+            $stmt = $conn->prepare("DELETE FROM tbl_customer_otp WHERE customer_otp_id = :otp_id");
+            $stmt->bindParam(':otp_id', $otpRow['customer_otp_id']);
+            $stmt->execute();
+
+            // 4. Encrypt password
+            $encryptedPassword = password_hash($json['customers_online_password'], PASSWORD_BCRYPT);
+
+            // 5. Insert into tbl_customers_online
+            $stmt = $conn->prepare("
+            INSERT INTO tbl_customers_online (
+                customers_online_username, 
+                customers_online_password, 
+                customers_online_profile_image,
+                customers_online_authentication_status
+            ) VALUES (
+                :customers_online_username, 
+                :customers_online_password, 
+                :customers_online_profile_image,
+                0
+            )
+        ");
+            $stmt->bindParam(':customers_online_username', $json['customer_username']);
+            $stmt->bindParam(':customers_online_password', $encryptedPassword);
             $stmt->bindParam(':customers_online_profile_image', $json['customers_online_profile_image']);
             $stmt->execute();
             $customers_online_id = $conn->lastInsertId();
 
-
+            // 6. Insert into tbl_customer_identification
             $stmt = $conn->prepare("
-                INSERT INTO tbl_customer_identification (
-                    customer_identification_attachment_filename
-                ) VALUES (
-                    :customer_identification_attachment_filename
-                )
-            ");
+            INSERT INTO tbl_customer_identification (
+                customer_identification_attachment_filename
+            ) VALUES (
+                :customer_identification_attachment_filename
+            )
+        ");
             $stmt->bindParam(':customer_identification_attachment_filename', $json['customer_identification_attachment_filename']);
             $stmt->execute();
             $identification_id = $conn->lastInsertId();
 
-
+            // 7. Insert into tbl_customers
             $stmt = $conn->prepare("
-                INSERT INTO tbl_customers (
-                    nationality_id,
-                    identification_id,
-                    customers_online_id,
-                    customers_fname,
-                    customers_lname,
-                    customers_email,
-                    customers_phone_number,
-                    customers_date_of_birth
-                ) VALUES (
-                    :nationality_id,
-                    :identification_id,
-                    :customers_online_id,
-                    :customers_fname,
-                    :customers_lname,
-                    :customers_email,
-                    :customers_phone_number,
-                    :customers_date_of_birth
-                )
-            ");
+            INSERT INTO tbl_customers (
+                nationality_id,
+                identification_id,
+                customers_online_id,
+                customers_fname,
+                customers_lname,
+                customers_email,
+                customers_phone_number,
+                customers_date_of_birth
+            ) VALUES (
+                :nationality_id,
+                :identification_id,
+                :customers_online_id,
+                :customers_fname,
+                :customers_lname,
+                :customers_email,
+                :customers_phone_number,
+                :customers_date_of_birth
+            )
+        ");
             $stmt->bindParam(':nationality_id', $json['nationality_id']);
             $stmt->bindParam(':identification_id', $identification_id);
             $stmt->bindParam(':customers_online_id', $customers_online_id);
@@ -624,12 +938,15 @@ class Demiren_customer
             $stmt->execute();
 
             $conn->commit();
-            return 1;
+            return json_encode(["success" => true, "message" => "Registration successful"]);
         } catch (PDOException $e) {
-            $conn->rollBack();
-            return $e->getMessage();
+            if ($conn->inTransaction()) {
+                $conn->rollBack();
+            }
+            return json_encode(["success" => false, "error" => "DB_ERROR", "message" => $e->getMessage()]);
         }
     }
+
 
     function customerCurrentBookings($json)
     {
@@ -702,15 +1019,46 @@ class Demiren_customer
         }
     }
 
+    function getAvailableRoomsWithGuests($json)
+    {
+        // {"guestNumber": 2, "checkIn": "2025-08-29 22:15:00", "checkOut": "2025-10-14 12:00:00"}
+        include "connection.php";
+        $data = json_decode($json, true);
+        $guestNumber = $data["guestNumber"];
+        $checkIn = $data["checkIn"];
+        $checkOut = $data["checkOut"];
+
+        $sql = "SELECT a.roomnumber_id AS room_ids, a.roomfloor, a.room_capacity, a.room_beds AS room_beds, a.room_sizes, b.roomtype_id, b.roomtype_name, b.roomtype_description, b.roomtype_price, c.status_name, c.status_id
+                FROM tbl_rooms a
+                INNER JOIN tbl_roomtype b ON b.roomtype_id = a.roomtype_id
+                INNER JOIN tbl_status_types c ON c.status_id = a.room_status_id
+                WHERE a.room_status_id = 3 AND a.roomtype_id NOT IN (
+                    SELECT a.roomtype_id
+                    FROM tbl_booking_room a
+                    INNER JOIN tbl_booking b ON b.booking_id = a.booking_id
+                    WHERE b.booking_checkin_dateandtime < :checkOut 
+                    AND b.booking_checkout_dateandtime > :checkIn
+                ) AND a.room_capacity >= :guestNumber
+        ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":guestNumber", $guestNumber);
+        $stmt->bindParam(":checkIn", $checkIn);
+        $stmt->bindParam(":checkOut", $checkOut);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+    }
+
+
     function customerBookingWithAccount($json)
     {
         // {
-        // "customerId": 1, 
-        // "bookingDetails": {"checkIn": "2023-06-01 02:00:00", "checkOut": "2025-06-02 03:00:00", "downpayment": 1000}, 
-        // "roomDetails": [ {"roomTypeId": 1}, {"roomTypeId": 2} ]
+        //     "customerId":2,
+        //     "bookingDetails":{"checkIn":"2023-06-01 02:00:00","checkOut":"2025-06-02 03:00:00","downpayment":1000,"children":2,"adult":3, "totalAmount": 5000},
+        //     "roomDetails":[ {"roomTypeId":1}, {"roomTypeId":2} ]
         // }
-
-        //THANK YOU <333 T-T XOXO xD
+        //THANK YOU <333 😭 XOXO xD
         include "connection.php";
         $json = json_decode($json, true);
 
@@ -719,17 +1067,22 @@ class Demiren_customer
             $customerId = $json["customerId"];
             $bookingDetails = $json["bookingDetails"];
             $roomDetails = $json["roomDetails"];
+            $totalGuests = $bookingDetails["adult"] + $bookingDetails["children"];
 
             $stmt = $conn->prepare("
                 INSERT INTO tbl_booking 
-                    (customers_id, customers_walk_in_id, booking_status_id, booking_downpayment, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at) 
+                    (customers_id, guests_amnt, customers_walk_in_id, booking_downpayment, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, children, adult, booking_totalAmount) 
                 VALUES 
-                    (:customers_id, NULL, 2, :booking_downpayment, :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW())
+                    (:customers_id, :guestTotalAmount, NULL, :booking_downpayment, :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :children, :adult, :totalAmount)
             ");
             $stmt->bindParam(":customers_id", $customerId);
             $stmt->bindParam(":booking_downpayment", $bookingDetails["downpayment"]);
             $stmt->bindParam(":booking_checkin_dateandtime", $bookingDetails["checkIn"]);
             $stmt->bindParam(":booking_checkout_dateandtime", $bookingDetails["checkOut"]);
+            $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
+            $stmt->bindParam(":guestTotalAmount", $totalGuests);
+            $stmt->bindParam(":children", $bookingDetails["children"]);
+            $stmt->bindParam(":adult", $bookingDetails["adult"]);
             $stmt->execute();
             $bookingId = $conn->lastInsertId();
 
@@ -741,13 +1094,259 @@ class Demiren_customer
                 $stmt->execute();
             }
 
-
             $conn->commit();
             return 1;
         } catch (PDOException $e) {
             $conn->rollBack();
             return $e->getMessage();
         }
+    }
+
+    function getBookingHistory($json)
+    {
+        include "connection.php";
+        $json = json_decode($json, true);
+
+        $bookingCustomerId = $json['booking_customer_id'] ?? 0;
+        $sql = "SELECT a.*, b.*, c.*, d.*, f.booking_status_name
+            FROM tbl_booking a
+            LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
+            INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
+            INNER JOIN tbl_rooms d ON d.roomtype_id = c.roomtype_id
+            INNER JOIN tbl_booking_history e ON e.booking_id = a.booking_id
+            INNER JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
+            WHERE a.customers_id = :bookingCustomerId
+            AND a.booking_isArchive = 0
+            ORDER BY a.booking_id DESC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
+        $stmt->execute();
+
+        if ($stmt->rowCount() === 0) {
+            return 0;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // echo json_encode($rows);
+        // die();
+        // Group by booking_id
+        $grouped = [];
+        foreach ($rows as $row) {
+            $bookingId = $row['booking_id'];
+
+            if (!isset($grouped[$bookingId])) {
+                $grouped[$bookingId] = [
+                    "booking_id" => $row["booking_id"],
+                    "booking_checkin_dateandtime" => $row["booking_checkin_dateandtime"],
+                    "booking_checkout_dateandtime" => $row["booking_checkout_dateandtime"],
+                    "customers_id" => $row["customers_id"],
+                    "booking_date" => $row["booking_created_at"],
+                    "booking_status" => $row["booking_status_name"],
+                    "guests_amnt" => $row["guests_amnt"],
+                    "booking_downpayment" => $row["booking_downpayment"],
+                    "booking_total" => $row["booking_totalAmount"],
+                    "rooms" => []
+                ];
+            }
+
+            $grouped[$bookingId]["rooms"][] = [
+                "booking_room_id" => $row["booking_room_id"],
+                "room_description" => $row["roomtype_description"],
+                "room_id" => $row["roomnumber_id"],
+                "room_number" => $row["roomnumber_id"],
+                "roomtype_id" => $row["roomtype_id"],
+                "roomtype_name" => $row["roomtype_name"],
+                "room_price" => $row["roomtype_price"]
+            ];
+        }
+
+        return array_values($grouped);
+    }
+
+
+
+
+    function archiveBooking($json)
+    {
+        // {"bookingId":4}
+        include "connection.php";
+        $json = json_decode($json, true);
+        $bookingId = $json['bookingId'];
+        $sql = "UPDATE tbl_booking SET booking_isArchive = 1 WHERE booking_id = :bookingId";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':bookingId', $bookingId);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? 1 : 0;
+    }
+
+    function getArchivedBookings($json)
+    {
+        include "connection.php";
+        $json = json_decode($json, true);
+
+        $bookingCustomerId = $json['booking_customer_id'] ?? 0;
+        $sql = "SELECT a.*, b.*, c.*, d.*, f.booking_status_name
+            FROM tbl_booking a
+            INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
+            INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
+            INNER JOIN tbl_rooms d ON d.roomtype_id = c.roomtype_id
+            INNER JOIN tbl_booking_history e ON e.booking_id = a.booking_id
+            INNER JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
+            WHERE a.customers_id = :bookingCustomerId
+            AND a.booking_isArchive = 1
+            ORDER BY a.booking_created_at DESC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
+        $stmt->execute();
+
+        if ($stmt->rowCount() === 0) {
+            return 0;
+        }
+
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // echo json_encode($rows);
+        // die();
+        // Group by booking_id
+        $grouped = [];
+        foreach ($rows as $row) {
+            $bookingId = $row['booking_id'];
+
+            if (!isset($grouped[$bookingId])) {
+                $grouped[$bookingId] = [
+                    "booking_id" => $row["booking_id"],
+                    "booking_checkin_dateandtime" => $row["booking_checkin_dateandtime"],
+                    "booking_checkout_dateandtime" => $row["booking_checkout_dateandtime"],
+                    "customers_id" => $row["customers_id"],
+                    "booking_date" => $row["booking_created_at"],
+                    "booking_status" => $row["booking_status_name"],
+                    "guests_amnt" => $row["guests_amnt"],
+                    "booking_downpayment" => $row["booking_downpayment"],
+                    "booking_total" => $row["booking_totalAmount"],
+                    "rooms" => []
+                ];
+            }
+
+            $grouped[$bookingId]["rooms"][] = [
+                "booking_room_id" => $row["booking_room_id"],
+                "room_description" => $row["roomtype_description"],
+                "room_id" => $row["roomnumber_id"],
+                "room_number" => $row["roomnumber_id"],
+                "roomtype_id" => $row["roomtype_id"],
+                "roomtype_name" => $row["roomtype_name"],
+                "room_price" => $row["roomtype_price"]
+            ];
+        }
+
+        return array_values($grouped);
+    }
+
+    function unarchiveBooking($json)
+    {
+        // {"bookingId":4}
+        include "connection.php";
+        $json = json_decode($json, true);
+        $bookingId = $json['bookingId'];
+        $sql = "UPDATE tbl_booking SET booking_isArchive = 0 WHERE booking_id = :bookingId";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':bookingId', $bookingId);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? 1 : 0;
+    }
+
+    function removeBookingRoom($json)
+    {
+        include "connection.php";
+        $conn->beginTransaction();
+        try {
+            $json = json_decode($json, true);
+            $bookingRoomId = $json['bookingRoomId'];
+            $bookingId = $json['bookingId'];
+
+            // 1️⃣ Delete the booking room
+            $sql = "DELETE FROM tbl_booking_room WHERE booking_room_id = :bookingRoomId";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':bookingRoomId', $bookingRoomId);
+            $stmt->execute();
+
+            // 2️⃣ Recalculate the total from remaining rooms
+            $sql = "SELECT SUM(rt.roomtype_price) as total 
+                FROM tbl_booking_room br
+                INNER JOIN tbl_roomtype rt ON rt.roomtype_id = br.roomtype_id
+                WHERE br.booking_id = :bookingId";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':bookingId', $bookingId);
+            $stmt->execute();
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $newTotal = $row['total'] ?? 0;
+
+            // 3️⃣ Calculate new downpayment (half of total)
+            $newDownpayment = $newTotal / 2;
+
+            // 4️⃣ Update booking total and downpayment
+            $sql = "UPDATE tbl_booking 
+                SET booking_totalAmount = :newTotal, 
+                    booking_downpayment = :newDownpayment
+                WHERE booking_id = :bookingId";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':newTotal', $newTotal);
+            $stmt->bindParam(':newDownpayment', $newDownpayment);
+            $stmt->bindParam(':bookingId', $bookingId);
+            $stmt->execute();
+
+            $conn->commit();
+            return 1;
+        } catch (PDOException $th) {
+            $conn->rollBack();
+            return $th->getMessage();
+        }
+    }
+
+    function login($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+
+        // Fetch user by username
+        $sql = "SELECT a.customers_online_id, a.customers_online_username, 
+                   a.customers_online_password, a.customers_online_profile_image, 
+                   b.*
+            FROM tbl_customers_online a 
+            INNER JOIN tbl_customers b ON b.customers_online_id = a.customers_online_id
+            WHERE a.customers_online_username = :customers_online_username
+            LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":customers_online_username", $data["username"]);
+        $stmt->execute();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        // If no user found
+        if (!$user) {
+            return 0;
+        }
+
+        // Verify password
+        if (password_verify($data["password"], $user["customers_online_password"])) {
+            // Remove password before returning
+            unset($user["customers_online_password"]);
+            return $user;
+        } else {
+            return 0;
+        }
+    }
+
+
+    function employeeLogin($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+        $sql = " SELECT * FROM tbl_employee WHERE employee_username = :employee_username AND BINARY employee_password = :employee_password";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":employee_username", $data["username"]);
+        $stmt->bindParam(":employee_password", $data["password"]);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? $stmt->fetch(PDO::FETCH_ASSOC) : 0;
     }
 } //customer
 
@@ -772,9 +1371,18 @@ switch ($operation) {
     case "customerForgotPassword":
         echo $demiren_customer->customerForgotPassword($json);
         break;
+
+    // Creating Account with OTP Verification
+    case "getAllNationalities":
+        echo $demiren_customer->getAllNationalities();
+        break;
+    case "checkAndSendOTP":
+        echo $demiren_customer->checkAndSendOTP($json);
+        break;
     case "customerChangeAuthenticationStatus":
         echo $demiren_customer->customerChangeAuthenticationStatus($json);
         break;
+
     case "customerBookingNoAccount":
         echo $demiren_customer->customerBookingNoAccount($json);
         break;
@@ -817,8 +1425,29 @@ switch ($operation) {
     case "customerCurrentBookingsWithoutAccount":
         echo $demiren_customer->customerCurrentBookingsWithoutAccount($json);
         break;
-    case "customerBookingWithAccount": 
+    case "customerBookingWithAccount":
         echo $demiren_customer->customerBookingWithAccount($json);
+        break;
+    case "getAvailableRoomsWithGuests":
+        echo json_encode($demiren_customer->getAvailableRoomsWithGuests($json));
+        break;
+    case "getBookingHistory":
+        echo json_encode($demiren_customer->getBookingHistory($json));
+        break;
+    case "archiveBooking":
+        echo json_encode($demiren_customer->archiveBooking($json));
+        break;
+    case "getArchivedBookings":
+        echo json_encode($demiren_customer->getArchivedBookings($json));
+        break;
+    case "unarchiveBooking":
+        echo json_encode($demiren_customer->unarchiveBooking($json));
+        break;
+    case "removeBookingRoom":
+        echo json_encode($demiren_customer->removeBookingRoom($json));
+        break;
+    case "login":
+        echo json_encode($demiren_customer->login($json));
         break;
     default:
         echo json_encode(["error" => "Invalid operation"]);
@@ -833,3 +1462,5 @@ switch ($operation) {
 // wowowowo = feedback name sa github
 //hay nako
 //ang image sa logobells dapat ilisan 
+//WALA KOY MOUSE :((
+//2029??!!!! the helly

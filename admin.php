@@ -267,7 +267,7 @@ class Admin_Functions
             $walkInId = $conn->lastInsertId();
 
             // 4. Insert into tbl_booking
-            $reference_no = "REF" . date("YmdHis") . rand(100,999); // Generate unique reference number
+            $reference_no = "REF" . date("YmdHis") . rand(100, 999); // Generate unique reference number
             $stmt = $conn->prepare("INSERT INTO tbl_booking
                 (customers_id, customers_walk_in_id, adult, children, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
                 VALUES (:customers_id, :walkin_id, :adult, :children, :guests, :total_amount, :downpayment, :ref_no, :checkin, :checkout, NOW(), 0)");
@@ -438,32 +438,49 @@ class Admin_Functions
                 throw new Exception("Status 'Occupied' not found.");
             }
 
-            // 2️⃣ Insert into tbl_booking_room
-            $sqlInsertBookingRoom = "INSERT IGNORE INTO tbl_booking_room (booking_id, roomnumber_id, roomtype_id)
-                                     SELECT :booking_id, r.roomnumber_id, r.roomtype_id
-                                     FROM tbl_rooms r
-                                     WHERE r.roomnumber_id = :room_id";
-            $stmtInsert = $conn->prepare($sqlInsertBookingRoom);
+            // Prepare statements in advance
+            $sqlUpdateBookingRoom = "UPDATE tbl_booking_room 
+                                    SET roomnumber_id = :room_id
+                                    WHERE booking_id = :booking_id 
+                                    AND roomtype_id = (SELECT roomtype_id FROM tbl_rooms WHERE roomnumber_id = :room_id)
+                                    AND roomnumber_id IS NULL
+                                    LIMIT 1";
+            $stmtUpdateBookingRoom = $conn->prepare($sqlUpdateBookingRoom);
+
+            $sqlInsertBookingRoom = "INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id)
+                                    SELECT :booking_id, r.roomtype_id, r.roomnumber_id
+                                    FROM tbl_rooms r
+                                    WHERE r.roomnumber_id = :room_id";
+            $stmtInsertBookingRoom = $conn->prepare($sqlInsertBookingRoom);
+
+            $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
+            $stmtUpdateRoom = $conn->prepare($sqlUpdateRoom);
+
             foreach ($roomIds as $roomId) {
-                $stmtInsert->execute([
+                // 2️⃣ Try updating an existing placeholder row
+                $stmtUpdateBookingRoom->execute([
                     ':booking_id' => $bookingId,
                     ':room_id'    => $roomId
                 ]);
-            }
 
-            // 3️⃣ Update room statuses to Occupied
-            $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
-            $stmtUpdate = $conn->prepare($sqlUpdateRoom);
-            foreach ($roomIds as $roomId) {
-                $stmtUpdate->execute([
+                if ($stmtUpdateBookingRoom->rowCount() === 0) {
+                    // 3️⃣ If no row was updated, insert a new one
+                    $stmtInsertBookingRoom->execute([
+                        ':booking_id' => $bookingId,
+                        ':room_id'    => $roomId
+                    ]);
+                }
+
+                // 4️⃣ Update room status to Occupied
+                $stmtUpdateRoom->execute([
                     ':status_id' => $statusId,
                     ':room_id'   => $roomId
                 ]);
             }
 
-            // 4️⃣ Insert booking history (Approved = 2)
+            // 5️⃣ Insert booking history (Approved = 2)
             $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                           VALUES (:booking_id, :admin_id, 2, NOW())";
+                             VALUES (:booking_id, :admin_id, 2, NOW())"; 
             $stmtHistory = $conn->prepare($sqlHistory);
             $stmtHistory->execute([
                 ':booking_id' => $bookingId,
@@ -477,6 +494,7 @@ class Admin_Functions
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
+
 
     function declineCustomerBooking($data)
     {
