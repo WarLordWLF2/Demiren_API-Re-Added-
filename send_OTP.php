@@ -5,9 +5,9 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
-class SendEmail
+class sendVerificationOTP
 {
-    function sendEmail($emailToSent, $emailSubject, $emailBody)
+    function sendVerification($emailToSent, $emailSubject, $emailBody)
     {
         // Load Composer's autoloader
         require 'vendor/autoload.php';
