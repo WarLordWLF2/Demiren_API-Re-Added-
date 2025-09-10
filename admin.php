@@ -124,28 +124,52 @@ class Admin_Functions
         include 'connection.php';
 
         $sql = "SELECT 
-                    b.reference_no,
                     b.booking_id,
-                    COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
-                             CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                    b.reference_no,
                     b.booking_checkin_dateandtime,
                     b.booking_checkout_dateandtime,
+                    b.booking_created_at,
+                    -- Customer core
+                    COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                             CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                    COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+                    COALESCE(c.customers_phone_number, w.customers_walk_in_phone_number) AS customer_phone,
+                    n.nationality_name AS nationality,
+                    -- Rooms
                     GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS room_numbers,
-                    COALESCE(bs.booking_status_name, 'Pending') AS booking_status
+                    -- Latest status
+                    COALESCE(bs.booking_status_name, 'Pending') AS booking_status,
+                    -- Amounts
+                    COALESCE(bill.billing_total_amount, b.booking_totalAmount) AS total_amount,
+                    COALESCE(bill.billing_downpayment, b.booking_downpayment) AS downpayment
                 FROM tbl_booking b
-                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-                LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
-                LEFT JOIN tbl_booking_room br ON b.booking_id = br.booking_id
+                LEFT JOIN tbl_customers c 
+                    ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_nationality n 
+                    ON c.nationality_id = n.nationality_id
+                LEFT JOIN tbl_customers_walk_in w 
+                    ON b.customers_walk_in_id = w.customers_walk_in_id
+                LEFT JOIN tbl_booking_room br 
+                    ON b.booking_id = br.booking_id
                 LEFT JOIN (
                     SELECT bh.booking_id, bs.booking_status_name
                     FROM tbl_booking_history bh
-                    INNER JOIN tbl_booking_status bs ON bh.status_id = bs.booking_status_id
-                    WHERE bh.status_book_id IN (
-                        SELECT MAX(status_book_id)
+                    INNER JOIN tbl_booking_status bs 
+                        ON bh.status_id = bs.booking_status_id
+                    WHERE (bh.booking_id, bh.status_book_id) IN (
+                        SELECT booking_id, MAX(status_book_id)
                         FROM tbl_booking_history
                         GROUP BY booking_id
                     )
                 ) bs ON bs.booking_id = b.booking_id
+                LEFT JOIN (
+                    SELECT bi.booking_id,
+                           MAX(bi.billing_id) AS latest_billing_id
+                    FROM tbl_billing bi
+                    GROUP BY bi.booking_id
+                ) lb ON lb.booking_id = b.booking_id
+                LEFT JOIN tbl_billing bill 
+                    ON bill.billing_id = lb.latest_billing_id
                 GROUP BY b.booking_id
                 ORDER BY b.booking_created_at DESC";
 
@@ -298,18 +322,22 @@ class Admin_Functions
                 throw new Exception("Not enough new rooms provided. Booking has " . count($current_booking_rooms) . " rooms but only " . count($new_room_ids) . " new rooms provided");
             }
 
-            // Check if new rooms are available (status = 3 for vacant)
+            // Check if new rooms are available (vacant OR already assigned to this booking)
+            $placeholders = str_repeat('?,', count($new_room_ids) - 1) . '?';
             $room_check_stmt = $conn->prepare(
-                "SELECT roomnumber_id FROM tbl_rooms 
-                 WHERE roomnumber_id IN (" . str_repeat('?,', count($new_room_ids) - 1) . "?) 
-                 AND room_status_id = 3"
+                "SELECT r.roomnumber_id 
+                 FROM tbl_rooms r
+                 LEFT JOIN tbl_booking_room br ON r.roomnumber_id = br.roomnumber_id AND br.booking_id = ?
+                 WHERE r.roomnumber_id IN ($placeholders) 
+                 AND (r.room_status_id = 3 OR br.booking_id = ?)"
             );
-            $room_check_stmt->execute($new_room_ids);
+            $params = array_merge([$booking_id], $new_room_ids, [$booking_id]);
+            $room_check_stmt->execute($params);
             $available_rooms = $room_check_stmt->fetchAll(PDO::FETCH_COLUMN);
 
             if (count($available_rooms) < count($new_room_ids)) {
                 $unavailable_rooms = array_diff($new_room_ids, $available_rooms);
-                throw new Exception("Rooms " . implode(', ', $unavailable_rooms) . " are not available (not vacant)");
+                throw new Exception("Rooms " . implode(', ', $unavailable_rooms) . " are not available (not vacant or already occupied by another booking)");
             }
 
             // Store old room IDs for status update
@@ -338,23 +366,27 @@ class Admin_Functions
                 ];
             }
 
-            // Update room statuses: set old rooms to vacant (status = 3)
-            if (!empty($old_room_ids)) {
+            // Update room statuses: set old rooms to vacant (status = 3) - only if they're not in the new list
+            $rooms_to_free = array_diff($old_room_ids, $new_room_ids);
+            if (!empty($rooms_to_free)) {
                 $old_room_status_stmt = $conn->prepare(
                     "UPDATE tbl_rooms 
                      SET room_status_id = 3 
-                     WHERE roomnumber_id IN (" . str_repeat('?,', count($old_room_ids) - 1) . "?)"
+                     WHERE roomnumber_id IN (" . str_repeat('?,', count($rooms_to_free) - 1) . "?)"
                 );
-                $old_room_status_stmt->execute($old_room_ids);
+                $old_room_status_stmt->execute(array_values($rooms_to_free));
             }
 
-            // Update room statuses: set new rooms to occupied (status = 1)
-            $new_room_status_stmt = $conn->prepare(
-                "UPDATE tbl_rooms 
-                 SET room_status_id = 1 
-                 WHERE roomnumber_id IN (" . str_repeat('?,', count($new_room_ids) - 1) . "?)"
-            );
-            $new_room_status_stmt->execute($new_room_ids);
+            // Update room statuses: set new rooms to occupied (status = 1) - only if they're not already occupied by this booking
+            $rooms_to_occupy = array_diff($new_room_ids, $old_room_ids);
+            if (!empty($rooms_to_occupy)) {
+                $new_room_status_stmt = $conn->prepare(
+                    "UPDATE tbl_rooms 
+                     SET room_status_id = 1 
+                     WHERE roomnumber_id IN (" . str_repeat('?,', count($rooms_to_occupy) - 1) . "?)"
+                );
+                $new_room_status_stmt->execute(array_values($rooms_to_occupy));
+            }
 
             $conn->commit();
             
@@ -644,6 +676,7 @@ class Admin_Functions
     function approveCustomerBooking($data)
     {
         include 'connection.php';
+        include_once 'send_email.php';
 
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
@@ -709,13 +742,146 @@ class Admin_Functions
             ]);
 
             $conn->commit();
+
+            // Send approval email to the customer (best-effort; errors are ignored)
+            try {
+                // Get customer contact, booking info, and payment details
+                $infoStmt = $conn->prepare("SELECT 
+                        COALESCE(c.customers_email, w.customers_walk_in_email) AS email,
+                        COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                                 CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                        b.reference_no,
+                        b.booking_checkin_dateandtime,
+                        b.booking_checkout_dateandtime,
+                        b.booking_totalAmount,
+                        b.booking_downpayment,
+                        -- Billing details
+                        bill.billing_total_amount,
+                        bill.billing_downpayment AS billing_downpayment,
+                        bill.billing_vat,
+                        bill.billing_balance,
+                        bill.billing_invoice_number,
+                        bill.billing_dateandtime,
+                        -- Payment method
+                        pm.payment_method_name,
+                        -- Invoice details
+                        inv.invoice_id,
+                        inv.invoice_date,
+                        inv.invoice_time,
+                        inv.invoice_total_amount
+                    FROM tbl_booking b
+                    LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                    LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                    LEFT JOIN (
+                        SELECT booking_id, 
+                               MAX(billing_id) AS latest_billing_id
+                        FROM tbl_billing 
+                        GROUP BY booking_id
+                    ) lb ON lb.booking_id = b.booking_id
+                    LEFT JOIN tbl_billing bill ON bill.billing_id = lb.latest_billing_id
+                    LEFT JOIN tbl_payment_method pm ON bill.payment_method_id = pm.payment_method_id
+                    LEFT JOIN tbl_invoice inv ON bill.billing_id = inv.billing_id
+                    WHERE b.booking_id = :booking_id LIMIT 1");
+                $infoStmt->execute([':booking_id' => $bookingId]);
+                $info = $infoStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+
+                $customerEmail = $info['email'] ?? null;
+                $customerName  = $info['customer_name'] ?? 'Guest';
+                $refNo         = $info['reference_no'] ?? '';
+                $checkInRaw    = $info['booking_checkin_dateandtime'] ?? '';
+                $checkOutRaw   = $info['booking_checkout_dateandtime'] ?? '';
+                
+                // Payment details
+                $totalAmount = $info['billing_total_amount'] ?? $info['booking_totalAmount'] ?? 0;
+                $downpayment = $info['billing_downpayment'] ?? $info['booking_downpayment'] ?? 0;
+                $vat = $info['billing_vat'] ?? 0;
+                $balance = $info['billing_balance'] ?? 0;
+                $paymentMethod = $info['payment_method_name'] ?? 'Not specified';
+                $invoiceNumber = $info['billing_invoice_number'] ?? $refNo;
+                $billingDate = $info['billing_dateandtime'] ?? '';
+                $invoiceDate = $info['invoice_date'] ?? '';
+                $invoiceTime = $info['invoice_time'] ?? '';
+
+                // Format dates to be more readable (e.g., "June 3, 2025")
+                $checkIn = '';
+                $checkOut = '';
+                if (!empty($checkInRaw)) {
+                    $checkIn = date('F j, Y', strtotime($checkInRaw));
+                }
+                if (!empty($checkOutRaw)) {
+                    $checkOut = date('F j, Y', strtotime($checkOutRaw));
+                }
+
+                // Determine assigned rooms (prefer provided list; otherwise read from DB)
+                $assignedRooms = $roomIds;
+                if (empty($assignedRooms)) {
+                    $roomsStmt = $conn->prepare("SELECT roomnumber_id FROM tbl_booking_room WHERE booking_id = :booking_id AND roomnumber_id IS NOT NULL ORDER BY booking_room_id ASC");
+                    $roomsStmt->execute([':booking_id' => $bookingId]);
+                    $assignedRooms = $roomsStmt->fetchAll(PDO::FETCH_COLUMN);
+                }
+
+                if (!empty($customerEmail)) {
+                    $subject = 'Your Booking Has Been Approved - Receipt Included';
+                    $roomsText = !empty($assignedRooms) ? implode(', ', array_map('strval', $assignedRooms)) : 'To be assigned at check-in';
+
+                    // Format payment date
+                    $paymentDate = '';
+                    if (!empty($billingDate)) {
+                        $paymentDate = date('F j, Y', strtotime($billingDate));
+                    }
+
+                    $emailBody = "<div style=\"font-family:Arial,sans-serif;color:#111;\">"
+                        . "<h2 style=\"margin:0 0 12px;\">Booking Approved</h2>"
+                        . "<p style=\"margin:0 0 12px;\">Hi " . htmlspecialchars($customerName) . ",</p>"
+                        . "<p style=\"margin:0 0 12px;\">We're pleased to confirm your booking has been approved. Please find your booking details and receipt below.</p>"
+                        
+                        // Booking Details Section
+                        . "<div style=\"background:#f7f7f8;border:1px solid #e6e6e6;border-radius:8px;padding:12px;margin:12px 0;\">"
+                        . "<h3 style=\"margin:0 0 8px;color:#333;\">Booking Details</h3>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Reference No:</strong> " . htmlspecialchars($refNo) . "</p>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Check-in:</strong> " . htmlspecialchars($checkIn) . "</p>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Check-out:</strong> " . htmlspecialchars($checkOut) . "</p>"
+                        . "<p style=\"margin:0;\"><strong>Assigned Room(s):</strong> " . htmlspecialchars($roomsText) . "</p>"
+                        . "</div>"
+                        
+                        // Payment Receipt Section
+                        . "<div style=\"background:#f0f8ff;border:1px solid #b3d9ff;border-radius:8px;padding:12px;margin:12px 0;\">"
+                        . "<h3 style=\"margin:0 0 8px;color:#0066cc;\">Payment Receipt</h3>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Invoice No:</strong> " . htmlspecialchars($invoiceNumber) . "</p>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Payment Method:</strong> " . htmlspecialchars($paymentMethod) . "</p>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Payment Date:</strong> " . htmlspecialchars($paymentDate) . "</p>"
+                        . "<hr style=\"border:none;border-top:1px solid #ccc;margin:8px 0;\">"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Total Amount:</strong> ₱" . number_format($totalAmount, 2) . "</p>"
+                        . "<p style=\"margin:0 0 6px;\"><strong>Down Payment:</strong> ₱" . number_format($downpayment, 2) . "</p>";
+                    
+                    if ($vat > 0) {
+                        $emailBody .= "<p style=\"margin:0 0 6px;\"><strong>VAT (12%):</strong> ₱" . number_format($vat, 2) . "</p>";
+                    }
+                    
+                    if ($balance > 0) {
+                        $emailBody .= "<p style=\"margin:0 0 6px;color:#d9534f;\"><strong>Remaining Balance:</strong> ₱" . number_format($balance, 2) . "</p>";
+                    } else {
+                        $emailBody .= "<p style=\"margin:0 0 6px;color:#5cb85c;\"><strong>Status:</strong> Fully Paid</p>";
+                    }
+                    
+                    $emailBody .= "</div>"
+                        . "<p style=\"margin:12px 0 0;\">Please keep this email as your receipt. If you have questions or need any changes, reply to this email.</p>"
+                        . "<p style=\"margin:12px 0 0;color:#555;\">Thank you and we look forward to your stay!</p>"
+                        . "</div>";
+
+                    $mailer = new SendEmail();
+                    $mailer->sendEmail($customerEmail, $subject, $emailBody);
+                }
+            } catch (Exception $e) {
+                // Ignore email issues; the booking approval already succeeded
+            }
+
             echo json_encode(["success" => true, "message" => "Booking approved successfully."]);
         } catch (Exception $e) {
             $conn->rollBack();
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
-
 
     function declineCustomerBooking($data)
     {

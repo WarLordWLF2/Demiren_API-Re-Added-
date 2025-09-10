@@ -1420,6 +1420,7 @@ class Demiren_customer
     function checkAndSendOTP($json)
     {
         include "connection.php";
+        include_once "send_email.php"; // use the shared mailer
         $data = json_decode($json, true);
 
         try {
@@ -1481,10 +1482,26 @@ class Demiren_customer
             $stmt->bindParam(":expiration", $expiration);
             $stmt->execute();
 
+            // 7. Email the OTP (best-effort)
+            try {
+                $subject = 'Your Demiren verification code';
+                $body = "<div style=\"font-family:Arial,sans-serif;color:#111;\">"
+                    . "<h2 style=\"margin:0 0 12px;\">Verify your email</h2>"
+                    . "<p style=\"margin:0 0 12px;\">Use the code below to complete your registration:</p>"
+                    . "<div style=\"font-size:24px;font-weight:700;letter-spacing:3px;background:#f7f7f8;border:1px solid #e6e6e6;border-radius:8px;padding:12px;display:inline-block;\">"
+                    . htmlspecialchars($otp)
+                    . "</div>"
+                    . "<p style=\"margin:12px 0 0;color:#555;\">This code will expire in 5 minutes.</p>"
+                    . "</div>";
+                $mailer = new SendEmail();
+                $mailer->sendEmail($data['guest_email'], $subject, $body);
+            } catch (Exception $e) {
+                // ignore email issues
+            }
+
             return json_encode([
                 "success" => true,
-                "message" => "OTP generated successfully.",
-                "otp" => $otp // ⚠️ return only for testing, remove later when email sending is ready
+                "message" => "OTP generated and sent if email is valid."
             ]);
         } catch (PDOException $e) {
             return json_encode([
