@@ -755,6 +755,9 @@ class Admin_Functions
                         b.booking_checkout_dateandtime,
                         b.booking_totalAmount,
                         b.booking_downpayment,
+                        b.adult,
+                        b.children,
+                        b.guests_amnt,
                         -- Billing details
                         bill.billing_total_amount,
                         bill.billing_downpayment AS billing_downpayment,
@@ -821,7 +824,7 @@ class Admin_Functions
                 }
 
                 if (!empty($customerEmail)) {
-                    $subject = 'Your Booking Has Been Approved - Receipt Included';
+                    $subject = 'Booking Confirmation - Demiren Hotel';
                     $roomsText = !empty($assignedRooms) ? implode(', ', array_map('strval', $assignedRooms)) : 'To be assigned at check-in';
 
                     // Format payment date
@@ -830,43 +833,64 @@ class Admin_Functions
                         $paymentDate = date('F j, Y', strtotime($billingDate));
                     }
 
-                    $emailBody = "<div style=\"font-family:Arial,sans-serif;color:#111;\">"
-                        . "<h2 style=\"margin:0 0 12px;\">Booking Approved</h2>"
-                        . "<p style=\"margin:0 0 12px;\">Hi " . htmlspecialchars($customerName) . ",</p>"
-                        . "<p style=\"margin:0 0 12px;\">We're pleased to confirm your booking has been approved. Please find your booking details and receipt below.</p>"
+                    // Get room type information for better display
+                    $roomTypeInfo = '';
+                    if (!empty($assignedRooms)) {
+                        $roomTypeStmt = $conn->prepare("
+                            SELECT DISTINCT rt.roomtype_name 
+                            FROM tbl_booking_room br 
+                            JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id 
+                            JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id 
+                            WHERE br.booking_id = :booking_id AND br.roomnumber_id IS NOT NULL
+                        ");
+                        $roomTypeStmt->execute([':booking_id' => $bookingId]);
+                        $roomTypes = $roomTypeStmt->fetchAll(PDO::FETCH_COLUMN);
+                        $roomTypeInfo = !empty($roomTypes) ? implode(', ', $roomTypes) : 'Standard Room';
+                    }
+
+                    // Get guest count information
+                    $guestInfo = '';
+                    $adultCount = $info['adult'] ?? 1;
+                    $childrenCount = $info['children'] ?? 0;
+                    $guestInfo = $adultCount . ' adult' . ($adultCount > 1 ? 's' : '');
+                    if ($childrenCount > 0) {
+                        $guestInfo .= ', ' . $childrenCount . ' child' . ($childrenCount > 1 ? 'ren' : '');
+                    }
+
+                    $emailBody = "<div style=\"font-family:Arial,sans-serif;color:#000;max-width:600px;margin:0 auto;background:#fff;\">"
+                        . "<div style=\"padding:20px;\">"
+                        
+                        // Greeting
+                        . "<p style=\"margin:0 0 16px;font-size:16px;\">Dear " . htmlspecialchars($customerName) . ",</p>"
+                        . "<p style=\"margin:0 0 20px;font-size:16px;line-height:1.5;\">Thank you for booking your stay with us. We are looking forward to your visit.</p>"
                         
                         // Booking Details Section
-                        . "<div style=\"background:#f7f7f8;border:1px solid #e6e6e6;border-radius:8px;padding:12px;margin:12px 0;\">"
-                        . "<h3 style=\"margin:0 0 8px;color:#333;\">Booking Details</h3>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Reference No:</strong> " . htmlspecialchars($refNo) . "</p>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Check-in:</strong> " . htmlspecialchars($checkIn) . "</p>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Check-out:</strong> " . htmlspecialchars($checkOut) . "</p>"
-                        . "<p style=\"margin:0;\"><strong>Assigned Room(s):</strong> " . htmlspecialchars($roomsText) . "</p>"
+                        . "<p style=\"margin:0 0 12px;font-size:16px;\">Your booking details are as follows:</p>"
+                        . "<div style=\"background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:20px;margin:20px 0;\">"
+                        
+                        // Two-column layout for booking details
+                        . "<table style=\"width:100%;border-collapse:collapse;\">"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Check in</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($checkIn) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Check out</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($checkOut) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Room</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomTypeInfo) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Breakfast</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">included</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\"># of Guests</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($guestInfo) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Booked by</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($customerName) . " (" . htmlspecialchars($customerEmail) . ")</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;font-size:14px;\">Total</td><td style=\"padding:8px 0;font-size:14px;font-weight:bold;\">₱" . number_format($totalAmount, 2) . "</td></tr>"
+                        . "</table>"
                         . "</div>"
                         
-                        // Payment Receipt Section
-                        . "<div style=\"background:#f0f8ff;border:1px solid #b3d9ff;border-radius:8px;padding:12px;margin:12px 0;\">"
-                        . "<h3 style=\"margin:0 0 8px;color:#0066cc;\">Payment Receipt</h3>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Invoice No:</strong> " . htmlspecialchars($invoiceNumber) . "</p>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Payment Method:</strong> " . htmlspecialchars($paymentMethod) . "</p>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Payment Date:</strong> " . htmlspecialchars($paymentDate) . "</p>"
-                        . "<hr style=\"border:none;border-top:1px solid #ccc;margin:8px 0;\">"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Total Amount:</strong> ₱" . number_format($totalAmount, 2) . "</p>"
-                        . "<p style=\"margin:0 0 6px;\"><strong>Down Payment:</strong> ₱" . number_format($downpayment, 2) . "</p>";
-                    
-                    if ($vat > 0) {
-                        $emailBody .= "<p style=\"margin:0 0 6px;\"><strong>VAT (12%):</strong> ₱" . number_format($vat, 2) . "</p>";
-                    }
-                    
-                    if ($balance > 0) {
-                        $emailBody .= "<p style=\"margin:0 0 6px;color:#d9534f;\"><strong>Remaining Balance:</strong> ₱" . number_format($balance, 2) . "</p>";
-                    } else {
-                        $emailBody .= "<p style=\"margin:0 0 6px;color:#5cb85c;\"><strong>Status:</strong> Fully Paid</p>";
-                    }
-                    
-                    $emailBody .= "</div>"
-                        . "<p style=\"margin:12px 0 0;\">Please keep this email as your receipt. If you have questions or need any changes, reply to this email.</p>"
-                        . "<p style=\"margin:12px 0 0;color:#555;\">Thank you and we look forward to your stay!</p>"
+                        // Closing remarks
+                        . "<p style=\"margin:20px 0 0;font-size:16px;line-height:1.5;\">If you have any questions please don't hesitate to contact us.</p>"
+                        . "<p style=\"margin:16px 0 0;font-size:16px;line-height:1.5;\">We hope you enjoy your stay with us!</p>"
+                        
+                        // Sign-off
+                        . "<div style=\"margin-top:30px;\">"
+                        . "<p style=\"margin:0 0 4px;font-size:16px;\">Best Regards,</p>"
+                        . "<p style=\"margin:0;font-size:16px;font-weight:bold;\">Demiren Hotel</p>"
+                        . "</div>"
+                        
+                        . "</div>"
                         . "</div>";
 
                     $mailer = new SendEmail();
