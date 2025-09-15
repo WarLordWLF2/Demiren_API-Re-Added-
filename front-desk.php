@@ -72,9 +72,34 @@ LEFT JOIN tbl_booking_status s ON h.status_id = s.booking_status_id
                 a.room_capacity,
                 a.room_beds,
                 a.room_sizes,
-                b.status_name
+                b.status_name,
+                GROUP_CONCAT(
+                    CASE 
+                        WHEN bk.booking_checkin_dateandtime IS NOT NULL 
+                        THEN CONCAT(
+                            DATE_FORMAT(bk.booking_checkin_dateandtime, '%Y-%m-%d'), 
+                            ' to ', 
+                            DATE_FORMAT(bk.booking_checkout_dateandtime, '%Y-%m-%d')
+                        )
+                        ELSE NULL 
+                    END 
+                    ORDER BY bk.booking_checkin_dateandtime ASC 
+                    SEPARATOR '; '
+                ) AS booking_dates
                 FROM tbl_rooms a
-                INNER JOIN tbl_status_types b ON a.room_status_id = b.status_id;";
+                INNER JOIN tbl_status_types b ON a.room_status_id = b.status_id
+                LEFT JOIN tbl_booking_room br ON a.roomnumber_id = br.roomnumber_id
+                LEFT JOIN tbl_booking bk ON br.booking_id = bk.booking_id 
+                    AND bk.booking_isArchive = 0
+                    AND bk.booking_checkin_dateandtime >= CURDATE()
+                GROUP BY 
+                    a.roomnumber_id,
+                    a.roomtype_id,
+                    a.roomfloor,
+                    a.room_capacity,
+                    a.room_beds,
+                    a.room_sizes,
+                    b.status_name;";
 
         try {
             $stmt = $conn->prepare($sql);

@@ -608,7 +608,6 @@ class Demiren_customer
         return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
     }
 
-
     function getCustomerAuthenticationStatus($json)
     {
         // {"customers_online_id": 1}
@@ -621,6 +620,7 @@ class Demiren_customer
         $returnValue = $stmt->fetch(PDO::FETCH_ASSOC);
         return $returnValue["customers_online_authentication_status"] ?? 0;
     }
+
     function getRooms()
     {
         include "connection.php";
@@ -920,6 +920,7 @@ class Demiren_customer
             return "Error: " . $e->getMessage();
         }
     }
+
     function getAvailableRoomsWithGuests($json)
     {
         // {"guestNumber": 2, "checkIn": "2025-08-29 22:15:00", "checkOut": "2025-10-14 12:00:00"}
@@ -1071,9 +1072,6 @@ class Demiren_customer
 
         return array_values($grouped);
     }
-
-
-
 
     function archiveBooking($json)
     {
