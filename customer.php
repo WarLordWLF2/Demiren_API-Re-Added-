@@ -677,22 +677,26 @@ class Demiren_customer
         $json['customers_fname'] = $json['firstName'] ?? null;
         $json['customers_lname'] = $json['lastName'] ?? null;
         $json['nationality_id'] = $json['nationality'] ?? null;
-        $json['customers_date_of_birth'] = $json['dob'] ?? null;
+        $json['customers_birthdate'] = $json['dob'] ?? null;
 
-        // 🔹 Optional fields (default = null)
-        $json['customers_online_profile_image'] = $json['customers_online_profile_image'] ?? null;
-        $json['customer_identification_attachment_filename'] = $json['customer_identification_attachment_filename'] ?? null;
-        $json['customers_phone_number'] = $json['customers_phone_number'] ?? null;
+        // 🔹 Phone number (frontend: phone → backend: customers_phone)
+        if (!empty($json['phone'])) {
+            $json['customers_phone'] = preg_replace('/\D/', '', $json['phone']); // keep digits only
+        } else {
+            $json['customers_phone'] = null;
+        }
 
         try {
             $conn->beginTransaction();
 
             // 1. Check if email exists in tbl_customers
-            $stmt = $conn->prepare("SELECT customers_id 
-                                FROM tbl_customers 
-                                WHERE customers_email = :customers_email 
-                                  AND customers_online_id IS NOT NULL 
-                                LIMIT 1");
+            $stmt = $conn->prepare("
+                SELECT customers_id 
+                FROM tbl_customers 
+                WHERE customers_email = :customers_email 
+                  AND customers_online_id IS NOT NULL 
+                LIMIT 1
+            ");
             $stmt->bindParam(':customers_email', $json['customers_email']);
             $stmt->execute();
             if ($stmt->fetch()) {
@@ -704,29 +708,31 @@ class Demiren_customer
                 ]);
             }
 
-            // 2. Check duplicate account in tbl_customers_online
-            $stmt = $conn->prepare("SELECT customers_online_id 
-                                FROM tbl_customers_online 
-                                WHERE customers_online_username = :customers_email 
-                                LIMIT 1");
-            $stmt->bindParam(':customers_email', $json['customers_email']);
+            // 2. Check duplicate username in tbl_customers_online
+            $stmt = $conn->prepare("
+                SELECT customers_online_id 
+                FROM tbl_customers_online 
+                WHERE customers_online_username = :customer_username 
+                LIMIT 1
+            ");
+            $stmt->bindParam(':customer_username', $json['customer_username']);
             $stmt->execute();
             if ($stmt->fetch()) {
                 $conn->rollBack();
                 return json_encode([
                     "success" => false,
-                    "error"   => "EMAIL_EXISTS_ONLINE",
-                    "message" => "This email is already registered in tbl_customers_online."
+                    "error"   => "USERNAME_EXISTS",
+                    "message" => "This username is already taken."
                 ]);
             }
 
             // 3. Verify OTP
             $stmt = $conn->prepare("
-            SELECT customer_otp_id, otp_code, expiration_date, attempts, locked_until
-            FROM tbl_customer_otp 
-            WHERE guest_email = :guest_email 
-            ORDER BY customer_otp_id DESC LIMIT 1
-        ");
+                SELECT customer_otp_id, otp_code, expiration_date, attempts, locked_until
+                FROM tbl_customer_otp 
+                WHERE guest_email = :guest_email 
+                ORDER BY customer_otp_id DESC LIMIT 1
+            ");
             $stmt->bindParam(':guest_email', $json['customers_email']);
             $stmt->execute();
             $otpRow = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -755,12 +761,16 @@ class Demiren_customer
             if ($json['otp_code'] !== $otpRow['otp_code']) {
                 if ($otpRow['attempts'] + 1 >= 5) {
                     $stmt = $conn->prepare("
-                    UPDATE tbl_customer_otp 
-                    SET attempts = attempts + 1, locked_until = DATE_ADD(NOW(), INTERVAL 1 HOUR)
-                    WHERE customer_otp_id = :otp_id
-                ");
+                        UPDATE tbl_customer_otp 
+                        SET attempts = attempts + 1, locked_until = DATE_ADD(NOW(), INTERVAL 1 HOUR)
+                        WHERE customer_otp_id = :otp_id
+                    ");
                 } else {
-                    $stmt = $conn->prepare("UPDATE tbl_customer_otp SET attempts = attempts + 1 WHERE customer_otp_id = :otp_id");
+                    $stmt = $conn->prepare("
+                        UPDATE tbl_customer_otp 
+                        SET attempts = attempts + 1 
+                        WHERE customer_otp_id = :otp_id
+                    ");
                 }
                 $stmt->bindParam(':otp_id', $otpRow['customer_otp_id']);
                 $stmt->execute();
@@ -778,66 +788,56 @@ class Demiren_customer
 
             // 5. Insert into tbl_customers_online
             $stmt = $conn->prepare("
-            INSERT INTO tbl_customers_online (
-                customers_online_username, 
-                customers_online_password, 
-                customers_online_profile_image,
-                customers_online_authentication_status
-            ) VALUES (
-                :customers_online_username, 
-                :customers_online_password, 
-                :customers_online_profile_image,
-                0
-            )
-        ");
+                INSERT INTO tbl_customers_online (
+                    customers_online_username, 
+                    customers_online_password,
+                    customers_online_email,
+                    customers_online_phone,
+                    customers_online_created_at,
+                    customers_online_status
+                ) VALUES (
+                    :customers_online_username, 
+                    :customers_online_password,
+                    :customers_online_email,
+                    :customers_online_phone,
+                    NOW(),
+                    'pending'
+                )
+            ");
             $stmt->bindParam(':customers_online_username', $json['customer_username']);
             $stmt->bindParam(':customers_online_password', $encryptedPassword);
-            $stmt->bindParam(':customers_online_profile_image', $json['customers_online_profile_image']);
+            $stmt->bindParam(':customers_online_email', $json['customers_email']);
+            $stmt->bindParam(':customers_online_phone', $json['customers_phone']);
             $stmt->execute();
             $customers_online_id = $conn->lastInsertId();
 
-            // 6. Insert into tbl_customer_identification
+            // 6. Insert into tbl_customers
             $stmt = $conn->prepare("
-            INSERT INTO tbl_customer_identification (
-                customer_identification_attachment_filename
-            ) VALUES (
-                :customer_identification_attachment_filename
-            )
-        ");
-            $stmt->bindParam(':customer_identification_attachment_filename', $json['customer_identification_attachment_filename']);
-            $stmt->execute();
-            $identification_id = $conn->lastInsertId();
-
-            // 7. Insert into tbl_customers
-            $stmt = $conn->prepare("
-            INSERT INTO tbl_customers (
-                nationality_id,
-                identification_id,
-                customers_online_id,
-                customers_fname,
-                customers_lname,
-                customers_email,
-                customers_phone_number,
-                customers_date_of_birth
-            ) VALUES (
-                :nationality_id,
-                :identification_id,
-                :customers_online_id,
-                :customers_fname,
-                :customers_lname,
-                :customers_email,
-                :customers_phone_number,
-                :customers_date_of_birth
-            )
-        ");
+                INSERT INTO tbl_customers (
+                    nationality_id,
+                    customers_online_id,
+                    customers_fname,
+                    customers_lname,
+                    customers_email,
+                    customers_phone,
+                    customers_birthdate
+                ) VALUES (
+                    :nationality_id,
+                    :customers_online_id,
+                    :customers_fname,
+                    :customers_lname,
+                    :customers_email,
+                    :customers_phone,
+                    :customers_birthdate
+                )
+            ");
             $stmt->bindParam(':nationality_id', $json['nationality_id']);
-            $stmt->bindParam(':identification_id', $identification_id);
             $stmt->bindParam(':customers_online_id', $customers_online_id);
             $stmt->bindParam(':customers_fname', $json['customers_fname']);
             $stmt->bindParam(':customers_lname', $json['customers_lname']);
             $stmt->bindParam(':customers_email', $json['customers_email']);
-            $stmt->bindParam(':customers_phone_number', $json['customers_phone_number']);
-            $stmt->bindParam(':customers_date_of_birth', $json['customers_date_of_birth']);
+            $stmt->bindParam(':customers_phone', $json['customers_phone']);
+            $stmt->bindParam(':customers_birthdate', $json['customers_birthdate']);
             $stmt->execute();
 
             $conn->commit();
@@ -846,9 +846,18 @@ class Demiren_customer
             if ($conn->inTransaction()) {
                 $conn->rollBack();
             }
-            return json_encode(["success" => false, "error" => "DB_ERROR", "message" => $e->getMessage()]);
+            return json_encode([
+                "success" => false,
+                "error" => "DB_ERROR",
+                "message" => $e->getMessage()
+            ]);
         }
     }
+
+
+
+
+
 
     function customerCurrentBookings($json)
     {
@@ -1216,9 +1225,11 @@ class Demiren_customer
 
         try {
             // 1. Fetch account by username
-            $sql = "SELECT a.customers_online_id, a.customers_online_username, 
-                       a.customers_online_password, a.customers_online_profile_image, 
-                       b.*
+            $sql = "SELECT 
+                    a.customers_online_id, 
+                    a.customers_online_username, 
+                    a.customers_online_password,
+                    b.*
                 FROM tbl_customers_online a
                 INNER JOIN tbl_customers b 
                     ON b.customers_online_id = a.customers_online_id
@@ -1229,7 +1240,6 @@ class Demiren_customer
             $stmt->execute();
 
             if ($stmt->rowCount() === 0) {
-                header('Content-Type: application/json');
                 return json_encode([
                     "success" => false,
                     "message" => "Invalid username or password."
@@ -1245,7 +1255,7 @@ class Demiren_customer
             if (password_verify($inputPassword, $dbPassword)) {
                 $isValid = true;
             } elseif ($inputPassword === $dbPassword) {
-                // Legacy plain text password → migrate it to bcrypt
+                // Legacy plain text password → migrate to bcrypt
                 $isValid = true;
                 $newHash = password_hash($inputPassword, PASSWORD_BCRYPT);
 
@@ -1257,16 +1267,15 @@ class Demiren_customer
                 $update->execute();
             }
 
-            // 3. If still invalid, reject login
+            // 3. If still invalid
             if (!$isValid) {
-                header('Content-Type: application/json');
                 return json_encode([
                     "success" => false,
                     "message" => "Invalid username or password."
                 ]);
             }
 
-            // 4. If password hash algorithm has changed, rehash
+            // 4. Ensure password is using latest hash
             if (password_needs_rehash($user["customers_online_password"], PASSWORD_BCRYPT)) {
                 $newHash = password_hash($inputPassword, PASSWORD_BCRYPT);
                 $update = $conn->prepare("UPDATE tbl_customers_online 
@@ -1277,22 +1286,21 @@ class Demiren_customer
                 $update->execute();
             }
 
-            // 5. Remove password before returning data
+            // 5. Remove password before returning
             unset($user["customers_online_password"]);
 
-            header('Content-Type: application/json');
             return json_encode([
                 "success" => true,
                 "user" => $user
             ]);
         } catch (PDOException $e) {
-            header('Content-Type: application/json');
             return json_encode([
                 "success" => false,
                 "message" => "Database error: " . $e->getMessage()
             ]);
         }
     }
+
 
     function employeeLogin($json)
     {
