@@ -1,6 +1,6 @@
 <?php
 $host = 'localhost';
-$dbname = 'demiren';
+$dbname = 'true_demiren_fresh'; //put database name
 $user = 'root';
 $pass = '';
 
