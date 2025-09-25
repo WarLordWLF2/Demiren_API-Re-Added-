@@ -1917,6 +1917,167 @@ class Admin_Functions
 
         return $rowCount > 0 ? 1 : 0;
     }
+
+    // Amenity Request Functions
+    function getAmenityRequests()
+    {
+        include "connection.php";
+        
+        $sql = "SELECT 
+                    car.request_id,
+                    car.booking_id,
+                    car.booking_room_id,
+                    car.charges_master_id,
+                    car.request_quantity,
+                    car.request_price,
+                    car.request_total,
+                    car.request_status,
+                    car.request_notes,
+                    car.customer_notes,
+                    car.requested_at,
+                    car.processed_at,
+                    car.admin_notes,
+                    b.reference_no,
+                    CONCAT(COALESCE(c.customers_fname, w.customers_walk_in_fname), ' ', COALESCE(c.customers_lname, w.customers_walk_in_lname)) AS customer_name,
+                    COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+                    COALESCE(c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
+                    cm.charges_master_name,
+                    cc.charges_category_name,
+                    rt.roomtype_name,
+                    r.roomnumber_id,
+                    CONCAT(e.employee_fname, ' ', e.employee_lname) AS processed_by_name
+                FROM tbl_customer_amenity_requests car
+                LEFT JOIN tbl_booking b ON car.booking_id = b.booking_id
+                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                LEFT JOIN tbl_charges_master cm ON car.charges_master_id = cm.charges_master_id
+                LEFT JOIN tbl_charges_category cc ON cm.charges_category_id = cc.charges_category_id
+                LEFT JOIN tbl_booking_room br ON car.booking_room_id = br.booking_room_id
+                LEFT JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
+                LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                LEFT JOIN tbl_employee e ON car.processed_by = e.employee_id
+                ORDER BY car.requested_at DESC";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    function approveAmenityRequest($data)
+    {
+        include "connection.php";
+        // $data is already an array from the switch statement
+        
+        $request_id = $data['request_id'];
+        $employee_id = $data['employee_id'] ?? 1; // Default to admin
+        $admin_notes = $data['admin_notes'] ?? '';
+        
+        try {
+            $conn->beginTransaction();
+            
+            // 1. Update the request status
+            $updateRequest = $conn->prepare("
+                UPDATE tbl_customer_amenity_requests 
+                SET request_status = 'approved', 
+                    processed_at = NOW(), 
+                    processed_by = :employee_id,
+                    admin_notes = :admin_notes
+                WHERE request_id = :request_id
+            ");
+            $updateRequest->bindParam(':request_id', $request_id);
+            $updateRequest->bindParam(':employee_id', $employee_id);
+            $updateRequest->bindParam(':admin_notes', $admin_notes);
+            $updateRequest->execute();
+            
+            // 2. Get request details
+            $getRequest = $conn->prepare("
+                SELECT car.*, br.booking_id 
+                FROM tbl_customer_amenity_requests car
+                JOIN tbl_booking_room br ON car.booking_room_id = br.booking_room_id
+                WHERE car.request_id = :request_id
+            ");
+            $getRequest->bindParam(':request_id', $request_id);
+            $getRequest->execute();
+            $request = $getRequest->fetch(PDO::FETCH_ASSOC);
+            
+            // 3. Add to booking_charges
+            $addCharge = $conn->prepare("
+                INSERT INTO tbl_booking_charges 
+                (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity)
+                VALUES (:booking_room_id, :charges_master_id, :price, :quantity)
+            ");
+            $addCharge->bindParam(':booking_room_id', $request['booking_room_id']);
+            $addCharge->bindParam(':charges_master_id', $request['charges_master_id']);
+            $addCharge->bindParam(':price', $request['request_price']);
+            $addCharge->bindParam(':quantity', $request['request_quantity']);
+            $addCharge->execute();
+            
+            // 4. Update booking total amount
+            $updateBooking = $conn->prepare("
+                UPDATE tbl_booking 
+                SET booking_totalAmount = booking_totalAmount + :amount
+                WHERE booking_id = :booking_id
+            ");
+            $updateBooking->bindParam(':amount', $request['request_total']);
+            $updateBooking->bindParam(':booking_id', $request['booking_id']);
+            $updateBooking->execute();
+            
+            $conn->commit();
+            return 1;
+            
+        } catch (Exception $e) {
+            $conn->rollBack();
+            return 0;
+        }
+    }
+
+    function rejectAmenityRequest($data)
+    {
+        include "connection.php";
+        // $data is already an array from the switch statement
+        
+        $request_id = $data['request_id'];
+        $employee_id = $data['employee_id'] ?? 1; // Default to admin
+        $admin_notes = $data['admin_notes'] ?? '';
+        
+        try {
+            $stmt = $conn->prepare("
+                UPDATE tbl_customer_amenity_requests 
+                SET request_status = 'rejected', 
+                    processed_at = NOW(), 
+                    processed_by = :employee_id,
+                    admin_notes = :admin_notes
+                WHERE request_id = :request_id
+            ");
+            $stmt->bindParam(':request_id', $request_id);
+            $stmt->bindParam(':employee_id', $employee_id);
+            $stmt->bindParam(':admin_notes', $admin_notes);
+            $stmt->execute();
+            
+            return $stmt->rowCount() > 0 ? 1 : 0;
+            
+        } catch (Exception $e) {
+            return 0;
+        }
+    }
+
+    function getAmenityRequestStats()
+    {
+        include "connection.php";
+        
+        $sql = "SELECT 
+                    COUNT(*) as total_requests,
+                    SUM(CASE WHEN request_status = 'pending' THEN 1 ELSE 0 END) as pending_requests,
+                    SUM(CASE WHEN request_status = 'approved' THEN 1 ELSE 0 END) as approved_requests,
+                    SUM(CASE WHEN request_status = 'rejected' THEN 1 ELSE 0 END) as rejected_requests,
+                    SUM(CASE WHEN request_status = 'pending' THEN request_total ELSE 0 END) as pending_amount,
+                    SUM(CASE WHEN request_status = 'approved' THEN request_total ELSE 0 END) as approved_amount
+                FROM tbl_customer_amenity_requests";
+        
+        $stmt = $conn->prepare($sql);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    }
 }
 
 
@@ -2126,6 +2287,23 @@ switch ($methodType) {
 
     case "delete_room_types":
         echo $AdminClass->remove_RoomTypes($jsonData);
+        break;
+
+    // -------- Amenity Requests -------- //
+    case "get_amenity_requests":
+        echo json_encode($AdminClass->getAmenityRequests());
+        break;
+
+    case "approve_amenity_request":
+        echo $AdminClass->approveAmenityRequest($jsonData);
+        break;
+
+    case "reject_amenity_request":
+        echo $AdminClass->rejectAmenityRequest($jsonData);
+        break;
+
+    case "get_amenity_request_stats":
+        echo json_encode($AdminClass->getAmenityRequestStats());
         break;
 }
 

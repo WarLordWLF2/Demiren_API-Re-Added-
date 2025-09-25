@@ -17,31 +17,38 @@ class SendEmail
 
         try {
             // Server settings
-            $mail->SMTPDebug = 0;                                    // Disable verbose debug output
+            $mail->SMTPDebug = 0;                                    // Disable debug output for production
             $mail->isSMTP();                                        // Send using SMTP
             $mail->Host       = 'smtp.gmail.com';                   // Set the SMTP server to send through
             $mail->SMTPAuth   = true;                               // Enable SMTP authentication
-            $mail->Username   = 'baldozarazieljade96@gmail.com';               // SMTP username
-            $mail->Password   = 'ntxbolxdsdpfgdwo';                 // SMTP password
+            $mail->Username   = 'ikversoza@gmail.com';     // SMTP username
+            $mail->Password   = 'izpfukocrjngaogg';                 // SMTP password (App Password)
             $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;        // Enable implicit TLS encryption
             $mail->Port       = 465;                                // TCP port to connect to; use 587 if you have set `SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS`
+            $mail->Timeout    = 30;                                 // Set timeout to 30 seconds
 
             // Recipients
-            $mail->setFrom('baldozarazieljade96@gmail.com', 'Phinma-COC CSDL');
-            $mail->addAddress($emailToSent, 'user');                 // Add a recipient
+            $mail->setFrom('ikversoza@gmail.com', 'Demiren Hotel');
+            $mail->addAddress($emailToSent, 'Guest');               // Add a recipient
 
             // Content
-            $mail->isHTML(true);                                  // Set email format to HTML
+            $mail->isHTML(true);                                    // Set email format to HTML
             $mail->Subject = $emailSubject;
             $mail->Body    = $emailBody;
-            $mail->AltBody = 'Kunwari alt body diri hehe';
+            $mail->AltBody = 'This is the plain text version of the email.';
 
             $mail->send();
-            return 1; // Success
+            
+            // Log success
+            error_log("Email sent successfully to: " . $emailToSent);
+            return true; // Success
         } catch (Exception $e) {
-            // Log or handle the error as needed
-            // echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo}";
-            return $e; // Failure
+            // Log detailed error information
+            error_log("Email sending failed to: " . $emailToSent);
+            error_log("PHPMailer Error: " . $mail->ErrorInfo);
+            error_log("Exception: " . $e->getMessage());
+            
+            return false; // Failure
         }
     }
 }
