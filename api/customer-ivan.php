@@ -367,7 +367,8 @@ class Demiren_customer
             return 1; // Success
         } catch (PDOException $e) {
             $conn->rollBack();
-            return $e->getMessage();
+            error_log("customerBookingNoAccount PDO Error: " . $e->getMessage());
+            return 0; // Return 0 for database errors
         }
     }
 
@@ -441,26 +442,25 @@ class Demiren_customer
         $json = json_decode($json, true);
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
 
-        // $sql = "SELECT a.*, b.*, c.*, d.*
-        //             FROM tbl_booking a
-        //             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
-        //             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
-        //             LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-        //             WHERE 
-        //                 (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
-        //                 AND a.booking_id NOT IN (
-        //                     SELECT booking_id 
-        //                     FROM tbl_booking_history 
-        //                     WHERE booking_id = a.booking_id
-        //                 )
-        //             ORDER BY a.booking_created_at DESC
-        //         ";
-        $sql = "SELECT a.*, b.*, c.*, d.*
+        $sql = "SELECT a.*, b.*, c.*, d.*, f.booking_status_name
                     FROM tbl_booking a
                     LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
                     LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
                     LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-                    WHERE a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId 
+                    LEFT JOIN (
+                        SELECT bh1.booking_id, bs.booking_status_name, bh1.status_id
+                        FROM tbl_booking_history bh1
+                        INNER JOIN (
+                            SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                            FROM tbl_booking_history
+                            GROUP BY booking_id
+                        ) bh2 ON bh1.booking_id = bh2.booking_id AND bh1.booking_history_id = bh2.latest_history_id
+                        LEFT JOIN tbl_booking_status bs ON bs.booking_status_id = bh1.status_id
+                    ) f ON f.booking_id = a.booking_id
+                    WHERE 
+                        (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
+                        AND a.booking_isArchive = 0
+                        AND (f.status_id IS NULL OR f.status_id NOT IN (3, 4))  -- Exclude Cancelled (3) and Checked-Out (4)
                     ORDER BY a.booking_created_at DESC
                 ";
 
@@ -491,6 +491,7 @@ class Demiren_customer
                     "booking_checkout_dateandtime" => $row['booking_checkout_dateandtime'],
                     "booking_created_at" => $row['booking_created_at'],
                     "booking_isArchive" => $row['booking_isArchive'],
+                    "booking_status_name" => $row['booking_status_name'] ?? 'Pending',
                     "roomsList" => []
                 ];
             }
@@ -537,9 +538,17 @@ class Demiren_customer
             LEFT JOIN tbl_booking_room AS b ON b.roomtype_id = a.roomtype_id
             LEFT JOIN tbl_booking AS c ON c.booking_id = b.booking_id
             LEFT JOIN tbl_rooms AS e ON e.roomtype_id = a.roomtype_id
-            LEFT JOIN tbl_booking_history AS f ON f.booking_id = c.booking_id
-            LEFT JOIN tbl_booking_status AS d ON d.booking_status_id = f.status_id
-            WHERE c.customers_id = :bookingCustomerId AND f.status_id IN (1, 2)";
+            LEFT JOIN (
+                SELECT bh1.booking_id, bs.booking_status_name, bh1.status_id
+                FROM tbl_booking_history bh1
+                INNER JOIN (
+                    SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                    FROM tbl_booking_history
+                    GROUP BY booking_id
+                ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+            ) d ON d.booking_id = c.booking_id
+            WHERE c.customers_id = :bookingCustomerId AND d.status_id IN (1, 2)";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
@@ -835,11 +844,20 @@ class Demiren_customer
             FROM tbl_roomtype AS a
             INNER JOIN tbl_booking_room AS b ON b.roomtype_id = a.roomtype_id
             INNER JOIN tbl_booking AS c ON c.booking_id = b.booking_id
-            INNER JOIN tbl_booking_status AS d ON d.booking_status_id = c.booking_status_id
+            INNER JOIN (
+                SELECT bh1.booking_id, bs.booking_status_name, bh1.status_id
+                FROM tbl_booking_history bh1
+                INNER JOIN (
+                    SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                    FROM tbl_booking_history
+                    GROUP BY booking_id
+                ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+            ) d ON d.booking_id = c.booking_id
             INNER JOIN tbl_rooms AS e ON e.roomtype_id = a.roomtype_id
             WHERE 
                 (c.customers_id = :bookingCustomerId OR c.customers_walk_in_id = :bookingCustomerId)
-                AND c.booking_status_id IN (1, 2)";
+                AND d.status_id IN (1, 2)";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
@@ -1044,6 +1062,12 @@ class Demiren_customer
                 $stmt->execute();
             }
 
+            // ✅ Step 5: Insert booking history with Pending status (status_id = 1)
+            $sql = "INSERT INTO tbl_booking_history(booking_id, employee_id, status_id, updated_at) VALUES (:booking_id, NULL, 1, NOW())";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":booking_id", $bookingId);
+            $stmt->execute();
+
             $conn->commit();
             return 1; // Success
         } catch (PDOException $e) {
@@ -1143,6 +1167,12 @@ class Demiren_customer
                 $stmt->execute();
             }
 
+            // ✅ Step 5: Insert booking history with Pending status (status_id = 1)
+            $sql = "INSERT INTO tbl_booking_history(booking_id, employee_id, status_id, updated_at) VALUES (:booking_id, NULL, 1, NOW())";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":booking_id", $bookingId);
+            $stmt->execute();
+
             $conn->commit();
             return 1; // Success
         } catch (PDOException $e) {
@@ -1162,8 +1192,16 @@ class Demiren_customer
             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
             LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-            LEFT JOIN tbl_booking_history e ON e.booking_id = a.booking_id
-            LEFT JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
+            LEFT JOIN (
+                SELECT bh1.booking_id, bs.booking_status_name
+                FROM tbl_booking_history bh1
+                INNER JOIN (
+                    SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                    FROM tbl_booking_history
+                    GROUP BY booking_id
+                ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+            ) f ON f.booking_id = a.booking_id
             WHERE a.customers_id = :bookingCustomerId
             AND a.booking_isArchive = 0
             ORDER BY a.booking_id DESC";
@@ -1240,8 +1278,16 @@ class Demiren_customer
             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
             LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-            LEFT JOIN tbl_booking_history e ON e.booking_id = a.booking_id
-            LEFT JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
+            LEFT JOIN (
+                SELECT bh1.booking_id, bs.booking_status_name
+                FROM tbl_booking_history bh1
+                INNER JOIN (
+                    SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                    FROM tbl_booking_history
+                    GROUP BY booking_id
+                ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+            ) f ON f.booking_id = a.booking_id
             WHERE a.customers_id = :bookingCustomerId
             AND a.booking_isArchive = 1
             ORDER BY a.booking_created_at DESC";
@@ -1430,7 +1476,9 @@ class Demiren_customer
                 g.charges_master_price,
                 h.charges_category_id,
                 h.charges_category_name,
-                i.charges_status_name
+                i.charges_status_name,
+                bs.booking_status_name,
+                bh.status_id
             FROM tbl_booking a
             INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
@@ -1438,9 +1486,17 @@ class Demiren_customer
             LEFT JOIN tbl_booking_charges f ON f.booking_room_id = b.booking_room_id
             LEFT JOIN tbl_charges_master g ON g.charges_master_id = f.charges_master_id
             LEFT JOIN tbl_charges_category h ON h.charges_category_id = g.charges_category_id
-            INNER JOIN tbl_charges_status i ON i.charges_status_id = g.charges_master_status_id
+            LEFT JOIN tbl_charges_status i ON i.charges_status_id = g.charges_master_status_id
+            LEFT JOIN tbl_booking_history bh ON bh.booking_id = a.booking_id
+            LEFT JOIN tbl_booking_status bs ON bs.booking_status_id = bh.status_id
             WHERE (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
               AND DATE(:today) BETWEEN DATE(a.booking_checkin_dateandtime) AND DATE(a.booking_checkout_dateandtime)
+              AND bh.status_id IN (2, 5)  -- Only Approved (2) or Checked-In (5) bookings
+              AND bh.updated_at = (
+                  SELECT MAX(updated_at) 
+                  FROM tbl_booking_history bh2 
+                  WHERE bh2.booking_id = a.booking_id
+              )
             ORDER BY a.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
@@ -1470,6 +1526,8 @@ class Demiren_customer
                     "booking_checkout_dateandtime" => $row['booking_checkout_dateandtime'],
                     "booking_created_at" => $row['booking_created_at'],
                     "booking_isArchive" => $row['booking_isArchive'],
+                    "booking_status_id" => $row['status_id'],
+                    "booking_status_name" => $row['booking_status_name'],
                     "chargesTotal" => 0,
                     "roomsTotal" => 0,
                     "booking_totalAmount" => $row['booking_totalAmount'],
@@ -1685,36 +1743,40 @@ class Demiren_customer
         try {
             $conn->beginTransaction();
 
-            $sqlInsert = "INSERT INTO tbl_booking_charges 
-            (booking_room_id, charges_master_id, booking_charges_quantity, booking_charges_price)
-            VALUES 
-            (:booking_room_id, :charges_master_id, :charges_quantity, :booking_charges_price)";
-            $stmtInsert = $conn->prepare($sqlInsert);
+            // Get charges master details for pricing
+            $getChargesMaster = $conn->prepare("
+                SELECT charges_master_id, charges_master_price 
+                FROM tbl_charges_master 
+                WHERE charges_master_id = :charges_master_id
+            ");
 
-            $totalPrice = 0;
+            $insertRequest = $conn->prepare("
+                INSERT INTO tbl_customer_amenity_requests 
+                (booking_id, booking_room_id, charges_master_id, request_quantity, request_price, request_total, request_status, requested_at)
+                VALUES 
+                (:booking_id, :booking_room_id, :charges_master_id, :request_quantity, :request_price, :request_total, 'pending', NOW())
+            ");
+
             foreach ($charges as $charge) {
-                $stmtInsert->bindParam(":booking_room_id", $charge["booking_room_id"]);
-                $stmtInsert->bindParam(":charges_master_id", $charge["charges_master_id"]);
-                $stmtInsert->bindParam(":charges_quantity", $charge["charges_quantity"]);
-                $stmtInsert->bindParam(":booking_charges_price", $charge["booking_charges_price"]);
-                $stmtInsert->execute();
+                // Get the actual price from charges master
+                $getChargesMaster->bindParam(":charges_master_id", $charge["charges_master_id"]);
+                $getChargesMaster->execute();
+                $chargesMaster = $getChargesMaster->fetch(PDO::FETCH_ASSOC);
+                
+                if ($chargesMaster) {
+                    $unitPrice = $chargesMaster['charges_master_price'];
+                    $quantity = $charge["charges_quantity"];
+                    $totalPrice = $unitPrice * $quantity;
 
-                $totalPrice += $charge["booking_charges_price"];
+                    $insertRequest->bindParam(":booking_id", $bookingId);
+                    $insertRequest->bindParam(":booking_room_id", $charge["booking_room_id"]);
+                    $insertRequest->bindParam(":charges_master_id", $charge["charges_master_id"]);
+                    $insertRequest->bindParam(":request_quantity", $quantity);
+                    $insertRequest->bindParam(":request_price", $unitPrice);
+                    $insertRequest->bindParam(":request_total", $totalPrice);
+                    $insertRequest->execute();
+                }
             }
-
-            $sqlSelect = "SELECT booking_totalAmount FROM tbl_booking WHERE booking_id = :bookingId";
-            $stmtSelect = $conn->prepare($sqlSelect);
-            $stmtSelect->bindParam(":bookingId", $bookingId);
-            $stmtSelect->execute();
-            $currentTotal = $stmtSelect->fetchColumn();
-
-            $newTotal = $currentTotal + $totalPrice;
-
-            $sqlUpdate = "UPDATE tbl_booking SET booking_totalAmount = :newTotal WHERE booking_id = :bookingId";
-            $stmtUpdate = $conn->prepare($sqlUpdate);
-            $stmtUpdate->bindParam(":newTotal", $newTotal);
-            $stmtUpdate->bindParam(":bookingId", $bookingId);
-            $stmtUpdate->execute();
 
             $conn->commit();
             return 1;
@@ -1743,6 +1805,58 @@ class Demiren_customer
         $roomTypeMaster["images"] = $roomTypeImages;
         return $roomTypeMaster;
     }
+
+    function canRequestAmenities($json)
+    {
+        include "connection.php";
+        $json = json_decode($json, true);
+        $bookingCustomerId = $json['booking_customer_id'] ?? 0;
+        $today = date("Y-m-d");
+
+        // Check if customer has any approved or checked-in bookings for today
+        $sql = "SELECT a.booking_id, a.reference_no, bs.booking_status_name, bh.status_id, br.booking_room_id
+                FROM tbl_booking a
+                LEFT JOIN tbl_booking_history bh ON bh.booking_id = a.booking_id
+                LEFT JOIN tbl_booking_status bs ON bs.booking_status_id = bh.status_id
+                LEFT JOIN tbl_booking_room br ON br.booking_id = a.booking_id
+                WHERE (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
+                  AND DATE(:today) BETWEEN DATE(a.booking_checkin_dateandtime) AND DATE(a.booking_checkout_dateandtime)
+                  AND bh.status_id IN (2, 5)  -- Only Approved (2) or Checked-In (5) bookings
+                  AND bh.updated_at = (
+                      SELECT MAX(updated_at) 
+                      FROM tbl_booking_history bh2 
+                      WHERE bh2.booking_id = a.booking_id
+                  )
+                ORDER BY a.booking_created_at DESC
+                LIMIT 1";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':today', $today);
+        $stmt->bindParam(':bookingCustomerId', $bookingCustomerId);
+        $stmt->execute();
+
+        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($booking) {
+            return [
+                "can_request" => true,
+                "booking_id" => $booking['booking_id'],
+                "booking_room_id" => $booking['booking_room_id'],
+                "reference_no" => $booking['reference_no'],
+                "status" => $booking['booking_status_name'],
+                "message" => "You can request amenities for your " . strtolower($booking['booking_status_name']) . " booking."
+            ];
+        } else {
+            return [
+                "can_request" => false,
+                "booking_id" => null,
+                "booking_room_id" => null,
+                "reference_no" => null,
+                "status" => null,
+                "message" => "No approved or checked-in bookings found for today. Please ensure your booking is approved or you are checked-in."
+            ];
+        }
+    }
 } //customer
 
 
@@ -1751,6 +1865,7 @@ class Demiren_customer
 $json = isset($_POST["json"]) ? $_POST["json"] : "0";
 $operation = isset($_POST["operation"]) ? $_POST["operation"] : "0";
 $demiren_customer = new Demiren_customer();
+
 switch ($operation) {
     case "customerProfile":
         echo $demiren_customer->customerProfile($json);
@@ -1844,6 +1959,9 @@ switch ($operation) {
         break;
     case "getAmenitiesMaster":
         echo json_encode($demiren_customer->getAmenitiesMaster());
+        break;
+    case "canRequestAmenities":
+        echo json_encode($demiren_customer->canRequestAmenities($json));
         break;
     case "addBookingCharges":
         echo json_encode($demiren_customer->addBookingCharges($json));

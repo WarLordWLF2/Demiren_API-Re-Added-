@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Sep 22, 2025 at 05:25 PM
+-- Generation Time: Sep 28, 2025 at 10:38 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -54,7 +54,6 @@ CREATE TABLE `tbl_billing` (
   `billing_balance` int(11) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-
 -- --------------------------------------------------------
 
 --
@@ -65,8 +64,6 @@ CREATE TABLE `tbl_booking` (
   `booking_id` int(11) NOT NULL,
   `customers_id` int(11) DEFAULT NULL,
   `customers_walk_in_id` int(11) DEFAULT NULL,
-  `adult` int(11) NOT NULL,
-  `children` int(11) NOT NULL,
   `guests_amnt` int(11) NOT NULL,
   `booking_totalAmount` int(11) NOT NULL,
   `booking_downpayment` int(11) DEFAULT NULL,
@@ -76,6 +73,13 @@ CREATE TABLE `tbl_booking` (
   `booking_created_at` datetime DEFAULT NULL,
   `booking_isArchive` tinyint(1) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_booking`
+--
+
+INSERT INTO `tbl_booking` (`booking_id`, `customers_id`, `customers_walk_in_id`, `guests_amnt`, `booking_totalAmount`, `booking_downpayment`, `reference_no`, `booking_checkin_dateandtime`, `booking_checkout_dateandtime`, `booking_created_at`, `booking_isArchive`) VALUES
+(1, 1, NULL, 1, 1180, 590, '', '2025-09-28 00:00:00', '2025-09-29 00:00:00', '2025-09-27 17:46:49', 0);
 
 -- --------------------------------------------------------
 
@@ -89,8 +93,19 @@ CREATE TABLE `tbl_booking_charges` (
   `booking_room_id` int(11) DEFAULT NULL,
   `booking_charges_price` int(11) DEFAULT NULL,
   `booking_charges_quantity` int(11) DEFAULT NULL,
-  `booking_charges_total` int(11) DEFAULT NULL
+  `booking_charges_total` int(11) DEFAULT NULL,
+  `booking_charge_status` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_booking_charges`
+--
+
+INSERT INTO `tbl_booking_charges` (`booking_charges_id`, `charges_master_id`, `booking_room_id`, `booking_charges_price`, `booking_charges_quantity`, `booking_charges_total`, `booking_charge_status`) VALUES
+(1, 1, 1, 100, 2, 200, 1),
+(2, 2, 1, 350, 2, 700, 1),
+(3, 2, 1, 400, 2, 800, 2),
+(4, 1, 1, 50, 4, 200, 2);
 
 -- --------------------------------------------------------
 
@@ -106,6 +121,12 @@ CREATE TABLE `tbl_booking_history` (
   `updated_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `tbl_booking_history`
+--
+
+INSERT INTO `tbl_booking_history` (`booking_history_id`, `booking_id`, `employee_id`, `status_id`, `updated_at`) VALUES
+(1, 1, 1, 5, '2025-09-27 19:29:41');
 
 -- --------------------------------------------------------
 
@@ -117,9 +138,17 @@ CREATE TABLE `tbl_booking_room` (
   `booking_room_id` int(11) NOT NULL,
   `booking_id` int(11) DEFAULT NULL,
   `roomtype_id` int(11) DEFAULT NULL,
-  `roomnumber_id` int(11) DEFAULT NULL
+  `roomnumber_id` int(11) DEFAULT NULL,
+  `bookingRoom_adult` int(11) NOT NULL,
+  `bookingRoom_children` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `tbl_booking_room`
+--
+
+INSERT INTO `tbl_booking_room` (`booking_room_id`, `booking_id`, `roomtype_id`, `roomnumber_id`, `bookingRoom_adult`, `bookingRoom_children`) VALUES
+(1, 1, 1, 3, 1, 0);
 
 -- --------------------------------------------------------
 
@@ -175,8 +204,38 @@ CREATE TABLE `tbl_charges_master` (
   `charges_category_id` int(11) DEFAULT NULL,
   `charges_master_name` varchar(100) NOT NULL,
   `charges_master_price` int(11) NOT NULL,
-  `charges_master_description` text DEFAULT NULL
+  `charges_master_description` text DEFAULT NULL,
+  `charges_master_status_id` int(11) NOT NULL DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_charges_master`
+--
+
+INSERT INTO `tbl_charges_master` (`charges_master_id`, `charges_category_id`, `charges_master_name`, `charges_master_price`, `charges_master_description`, `charges_master_status_id`) VALUES
+(1, 1, 'Towels', 0, 'ok', 1),
+(2, 1, 'Bed', 400, 'apoy nang tagumpay', 1),
+(3, 1, 'Extended Room Stay', 0, 'Depends on the room price on where they are staying at', 1);
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tbl_charges_status`
+--
+
+CREATE TABLE `tbl_charges_status` (
+  `charges_status_id` int(11) NOT NULL,
+  `charges_status_name` varchar(50) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_charges_status`
+--
+
+INSERT INTO `tbl_charges_status` (`charges_status_id`, `charges_status_name`) VALUES
+(1, 'Pending'),
+(2, 'Delivered'),
+(3, 'Cancelled');
 
 -- --------------------------------------------------------
 
@@ -216,6 +275,12 @@ CREATE TABLE `tbl_customers` (
   `customers_status` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `tbl_customers`
+--
+
+INSERT INTO `tbl_customers` (`customers_id`, `customers_online_id`, `customers_fname`, `customers_lname`, `customers_phone`, `customers_email`, `customers_address`, `customers_birthdate`, `customers_gender`, `identification_id`, `nationality_id`, `customers_created_at`, `customers_updated_at`, `customers_status`) VALUES
+(1, 1, 'Ivan Ky', 'Versoza', '09672959215', 'ivla.versoza.coc@phinmaed.com', NULL, '2003-01-17', NULL, NULL, 1, '2025-09-26 20:58:43', NULL, 'pending');
 
 -- --------------------------------------------------------
 
@@ -242,11 +307,19 @@ CREATE TABLE `tbl_customers_online` (
   `customers_online_username` varchar(100) NOT NULL,
   `customers_online_password` varchar(255) NOT NULL,
   `customers_online_email` varchar(100) NOT NULL,
-  `customers_online_phone` varchar(50) NOT NULL,
+  `customers_online_phone` varchar(20) NOT NULL,
   `customers_online_created_at` datetime DEFAULT NULL,
   `customers_online_updated_at` datetime DEFAULT NULL,
-  `customers_online_status` varchar(20) DEFAULT NULL
+  `customers_online_status` varchar(20) DEFAULT NULL,
+  `customers_online_profile_image` varchar(100) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `tbl_customers_online`
+--
+
+INSERT INTO `tbl_customers_online` (`customers_online_id`, `customers_online_username`, `customers_online_password`, `customers_online_email`, `customers_online_phone`, `customers_online_created_at`, `customers_online_updated_at`, `customers_online_status`, `customers_online_profile_image`) VALUES
+(1, 'Ivan_Ky', '$2y$10$Le8y/EZFkut0M/JM/vUn9O5xZw130/k2KssoCW7OacKb0U8XZnVIi', 'ivla.versoza.coc@phinmaed.com', '09672959215', '2025-09-26 20:58:43', NULL, 'pending', '');
 
 -- --------------------------------------------------------
 
@@ -359,30 +432,21 @@ CREATE TABLE `tbl_imagesroommaster` (
 --
 
 INSERT INTO `tbl_imagesroommaster` (`imagesroommaster_id`, `imagesroommaster_filename`, `roomtype_id`) VALUES
-(1, 'Standard_Room_1.jpg', 1),
-(2, 'Standard_Room_2.jpg', 1),
-(3, 'Standard_Room_3.jpg', 1),
-(4, 'Single_Room_1.jpg', 2),
-(5, 'Single_Room_2.jpg', 2),
-(6, 'Single_Room_3.jpg', 2),
-(7, 'Double_Room_1.jpg', 3),
-(8, 'Double_Room_2.jpg', 3),
-(9, 'Double_Room_3.jpg', 3),
-(10, 'Triple_Room_1.jpg', 4),
-(11, 'Triple_Room_2.jpg', 4),
-(12, 'Triple_Room_3.jpg', 4),
-(13, 'Quadruple_Room_1.jpg', 5),
-(14, 'Quadruple_Room_2.jpg', 5),
-(15, 'Quadruple_Room_3.jpg', 5),
-(16, 'Family_Room_1.jpg', 6),
-(17, 'Family_Room_2.jpg', 6),
-(18, 'Family_Room_3.jpg', 6),
-(19, 'Family_RoomB_1.jpg', 7),
-(20, 'Family_RoomB_2.jpg', 7),
-(21, 'Family_RoomB_3.jpg', 7),
-(22, 'Family_RoomC_1.jpg', 8),
-(23, 'Family_RoomC_2.jpg', 8),
-(24, 'Family_RoomC_3.jpg', 8);
+(1, 'standard1.jpg', 1),
+(2, 'standard2.jpg', 1),
+(3, 'standard3.jpg', 1),
+(4, 'single1.jpg', 2),
+(5, 'single2.jpg', 2),
+(6, 'double1.jpg', 3),
+(7, 'double2.jpg', 3),
+(8, 'triple1.jpg', 4),
+(9, 'triple2.jpg', 4),
+(10, 'familya1.jpg', 6),
+(11, 'familya2.jpg', 6),
+(12, 'familyb1.jpg', 7),
+(13, 'familyb2.jpg', 7),
+(14, 'familyc1.jpg', 8),
+(15, 'familyc2.jpg', 8);
 
 -- --------------------------------------------------------
 
@@ -518,7 +582,7 @@ INSERT INTO `tbl_rooms` (`roomnumber_id`, `roomtype_id`, `roomfloor`, `room_stat
 (7, 7, 2, 3),
 (8, 2, 2, 3),
 (9, 3, 3, 3),
-(10, 1, 3, 3),
+(10, 1, 3, 1),
 (11, 4, 3, 3),
 (12, 8, 3, 3),
 (13, 5, 4, 3),
@@ -544,22 +608,23 @@ CREATE TABLE `tbl_roomtype` (
   `roomtype_price` int(11) DEFAULT NULL,
   `roomtype_beds` int(11) NOT NULL,
   `roomtype_capacity` int(11) NOT NULL,
-  `roomtype_sizes` varchar(50) NOT NULL
+  `roomtype_sizes` varchar(50) NOT NULL,
+  `roomtype_image` varchar(100) NOT NULL DEFAULT 'standardmain.jpg'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `tbl_roomtype`
 --
 
-INSERT INTO `tbl_roomtype` (`roomtype_id`, `roomtype_name`, `max_capacity`, `roomtype_description`, `roomtype_price`, `roomtype_beds`, `roomtype_capacity`, `roomtype_sizes`) VALUES
-(1, 'Standard Twin Room', 2, 'Featuring free toiletries, this twin room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned twin room features a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit has 2 beds.', 1180, 2, 2, '21 m²'),
-(2, 'Single Room', 1, 'Providing free toiletries, this single room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned single room provides a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit offers 1 bed.', 880, 1, 1, '17 m²'),
-(3, 'Double Room', 2, 'Providing free toiletries, this double room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned double room provides a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit offers 1 bed.', 1180, 2, 2, '21 m²'),
-(4, 'Triple Room', 3, 'Featuring free toiletries, this triple room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned triple room features a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit has 3 beds.', 1650, 3, 3, '28 m²'),
-(5, 'Quadruple Room', 4, 'Providing free toiletries, this quadruple room includes a private bathroom with a shower, a bidet and a hairdryer. This quadruple room is air-conditioned and features a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit offers 4 beds.', 2100, 4, 4, '30 m²'),
-(6, 'Family Room A', 5, 'Featuring free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned family room features a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit has 5 beds.', 2630, 5, 5, '30 m²'),
-(7, 'Family Room B', 6, 'Providing free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned family room provides a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit offers 6 beds.', 3130, 6, 6, '30 m²'),
-(8, 'Family Room C', 14, 'Featuring free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The family room features air conditioning, a safe deposit box, an electric kettle, a tiled floor, as well as a flat-screen TV. The unit has 12 beds.', 7300, 12, 12, '30 m²');
+INSERT INTO `tbl_roomtype` (`roomtype_id`, `roomtype_name`, `max_capacity`, `roomtype_description`, `roomtype_price`, `roomtype_beds`, `roomtype_capacity`, `roomtype_sizes`, `roomtype_image`) VALUES
+(1, 'Standard Twin Room', 3, 'Featuring free toiletries, this twin room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned twin room features a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit has 2 beds.', 1180, 2, 2, '21 m²', 'standardmain.jpg'),
+(2, 'Single Room', 2, 'Providing free toiletries, this single room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned single room provides a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit offers 1 bed.', 880, 1, 1, '17 m²', 'singlemain.jpg'),
+(3, 'Double Room', 3, 'Providing free toiletries, this double room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned double room provides a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit offers 1 bed.', 1180, 1, 2, '21 m²', 'doublemain.jpg'),
+(4, 'Triple Room', 4, 'Featuring free toiletries, this triple room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned triple room features a flat-screen TV, a safe deposit box, an electric kettle, a tiled floor as well as a quiet street view. The unit has 3 beds.', 1650, 3, 3, '28 m²', 'triplemain.jpg'),
+(5, 'Quadruple Room', 5, 'Providing free toiletries, this quadruple room includes a private bathroom with a shower, a bidet and a hairdryer. This quadruple room is air-conditioned and features a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit offers 4 beds.', 2100, 4, 4, '30 m²', 'quadruplemain.jpg'),
+(6, 'Family Room A', 6, 'Featuring free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned family room features a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit has 5 beds.', 2630, 5, 5, '30 m²', 'familyamain.jpg'),
+(7, 'Family Room B', 7, 'Providing free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The air-conditioned family room provides a flat-screen TV, a safe deposit box, an electric kettle and a tiled floor. The unit offers 6 beds.', 3130, 6, 6, '30 m²', 'familybmain.jpg'),
+(8, 'Family Room C', 13, 'Featuring free toiletries, this family room includes a private bathroom with a shower, a bidet and a hairdryer. The family room features air conditioning, a safe deposit box, an electric kettle, a tiled floor, as well as a flat-screen TV. The unit has 12 beds.', 7300, 12, 12, '30 m²', 'familycmain.jpg');
 
 -- --------------------------------------------------------
 
@@ -615,8 +680,7 @@ INSERT INTO `tbl_status_types` (`status_id`, `status_name`) VALUES
 (2, 'Pending'),
 (3, 'Vacant'),
 (4, 'Under-Maintenance'),
-(5, 'Dirty'),
-(6, 'Disabled');
+(5, 'Dirty');
 
 -- --------------------------------------------------------
 
@@ -701,7 +765,8 @@ ALTER TABLE `tbl_booking`
 ALTER TABLE `tbl_booking_charges`
   ADD PRIMARY KEY (`booking_charges_id`),
   ADD KEY `tbl_booking_charges_ibfk_1` (`charges_master_id`),
-  ADD KEY `tbl_booking_charges_ibfk_2` (`booking_room_id`);
+  ADD KEY `tbl_booking_charges_ibfk_2` (`booking_room_id`),
+  ADD KEY `charge_status` (`booking_charge_status`);
 
 --
 -- Indexes for table `tbl_booking_history`
@@ -739,6 +804,12 @@ ALTER TABLE `tbl_charges_category`
 ALTER TABLE `tbl_charges_master`
   ADD PRIMARY KEY (`charges_master_id`),
   ADD KEY `tbl_charges_master_ibfk_1` (`charges_category_id`);
+
+--
+-- Indexes for table `tbl_charges_status`
+--
+ALTER TABLE `tbl_charges_status`
+  ADD PRIMARY KEY (`charges_status_id`);
 
 --
 -- Indexes for table `tbl_check_payment`
@@ -913,31 +984,31 @@ ALTER TABLE `tbl_additional_customer`
 -- AUTO_INCREMENT for table `tbl_billing`
 --
 ALTER TABLE `tbl_billing`
-  MODIFY `billing_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `billing_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `tbl_booking`
 --
 ALTER TABLE `tbl_booking`
-  MODIFY `booking_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `booking_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `tbl_booking_charges`
 --
 ALTER TABLE `tbl_booking_charges`
-  MODIFY `booking_charges_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `booking_charges_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `tbl_booking_history`
 --
 ALTER TABLE `tbl_booking_history`
-  MODIFY `booking_history_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `booking_history_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `tbl_booking_room`
 --
 ALTER TABLE `tbl_booking_room`
-  MODIFY `booking_room_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `booking_room_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `tbl_booking_status`
@@ -955,7 +1026,13 @@ ALTER TABLE `tbl_charges_category`
 -- AUTO_INCREMENT for table `tbl_charges_master`
 --
 ALTER TABLE `tbl_charges_master`
-  MODIFY `charges_master_id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `charges_master_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `tbl_charges_status`
+--
+ALTER TABLE `tbl_charges_status`
+  MODIFY `charges_status_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `tbl_check_payment`
@@ -967,7 +1044,7 @@ ALTER TABLE `tbl_check_payment`
 -- AUTO_INCREMENT for table `tbl_customers`
 --
 ALTER TABLE `tbl_customers`
-  MODIFY `customers_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `customers_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `tbl_customersreviews`
@@ -979,13 +1056,13 @@ ALTER TABLE `tbl_customersreviews`
 -- AUTO_INCREMENT for table `tbl_customers_online`
 --
 ALTER TABLE `tbl_customers_online`
-  MODIFY `customers_online_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `customers_online_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `tbl_customers_walk_in`
 --
 ALTER TABLE `tbl_customers_walk_in`
-  MODIFY `customers_walk_in_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `customers_walk_in_id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `tbl_customer_identification`
@@ -1009,7 +1086,7 @@ ALTER TABLE `tbl_employee`
 -- AUTO_INCREMENT for table `tbl_imagesroommaster`
 --
 ALTER TABLE `tbl_imagesroommaster`
-  MODIFY `imagesroommaster_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+  MODIFY `imagesroommaster_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=16;
 
 --
 -- AUTO_INCREMENT for table `tbl_invoice`
@@ -1075,7 +1152,7 @@ ALTER TABLE `tbl_room_amenities_master`
 -- AUTO_INCREMENT for table `tbl_status_types`
 --
 ALTER TABLE `tbl_status_types`
-  MODIFY `status_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `status_id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `tbl_user_level`
@@ -1103,135 +1180,135 @@ ALTER TABLE `tbl_visitorlogs`
 -- Constraints for table `tbl_additional_customer`
 --
 ALTER TABLE `tbl_additional_customer`
-  ADD CONSTRAINT `tbl_additional_customer_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`);
+  ADD CONSTRAINT `tbl_additional_customer_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_billing`
 --
 ALTER TABLE `tbl_billing`
-  ADD CONSTRAINT `tbl_billing_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`),
-  ADD CONSTRAINT `tbl_billing_ibfk_2` FOREIGN KEY (`booking_charges_id`) REFERENCES `tbl_booking_charges` (`booking_charges_id`),
-  ADD CONSTRAINT `tbl_billing_ibfk_3` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`),
-  ADD CONSTRAINT `tbl_billing_ibfk_4` FOREIGN KEY (`payment_method_id`) REFERENCES `tbl_payment_method` (`payment_method_id`),
-  ADD CONSTRAINT `tbl_billing_ibfk_5` FOREIGN KEY (`discounts_id`) REFERENCES `tbl_discounts` (`discounts_id`);
+  ADD CONSTRAINT `tbl_billing_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_billing_ibfk_2` FOREIGN KEY (`booking_charges_id`) REFERENCES `tbl_booking_charges` (`booking_charges_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_billing_ibfk_3` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_billing_ibfk_4` FOREIGN KEY (`payment_method_id`) REFERENCES `tbl_payment_method` (`payment_method_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_billing_ibfk_5` FOREIGN KEY (`discounts_id`) REFERENCES `tbl_discounts` (`discounts_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_booking`
 --
 ALTER TABLE `tbl_booking`
-  ADD CONSTRAINT `tbl_booking_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`),
-  ADD CONSTRAINT `tbl_booking_ibfk_4` FOREIGN KEY (`customers_walk_in_id`) REFERENCES `tbl_customers_walk_in` (`customers_walk_in_id`);
+  ADD CONSTRAINT `tbl_booking_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_ibfk_4` FOREIGN KEY (`customers_walk_in_id`) REFERENCES `tbl_customers_walk_in` (`customers_walk_in_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_booking_charges`
 --
 ALTER TABLE `tbl_booking_charges`
-  ADD CONSTRAINT `tbl_booking_charges_ibfk_1` FOREIGN KEY (`charges_master_id`) REFERENCES `tbl_charges_master` (`charges_master_id`),
-  ADD CONSTRAINT `tbl_booking_charges_ibfk_2` FOREIGN KEY (`booking_room_id`) REFERENCES `tbl_booking_room` (`booking_room_id`);
+  ADD CONSTRAINT `tbl_booking_charges_ibfk_1` FOREIGN KEY (`charges_master_id`) REFERENCES `tbl_charges_master` (`charges_master_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_charges_ibfk_2` FOREIGN KEY (`booking_room_id`) REFERENCES `tbl_booking_room` (`booking_room_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_charges_ibfk_3` FOREIGN KEY (`booking_charge_status`) REFERENCES `tbl_charges_status` (`charges_status_id`);
 
 --
 -- Constraints for table `tbl_booking_history`
 --
 ALTER TABLE `tbl_booking_history`
-  ADD CONSTRAINT `tbl_booking_history_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`),
-  ADD CONSTRAINT `tbl_booking_history_ibfk_2` FOREIGN KEY (`status_id`) REFERENCES `tbl_booking_status` (`booking_status_id`),
-  ADD CONSTRAINT `tbl_booking_history_ibfk_3` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`);
+  ADD CONSTRAINT `tbl_booking_history_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_history_ibfk_2` FOREIGN KEY (`status_id`) REFERENCES `tbl_booking_status` (`booking_status_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_history_ibfk_3` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_booking_room`
 --
 ALTER TABLE `tbl_booking_room`
-  ADD CONSTRAINT `tbl_booking_room_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`),
-  ADD CONSTRAINT `tbl_booking_room_ibfk_2` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`),
-  ADD CONSTRAINT `tbl_booking_room_ibfk_3` FOREIGN KEY (`roomnumber_id`) REFERENCES `tbl_rooms` (`roomnumber_id`);
+  ADD CONSTRAINT `tbl_booking_room_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_room_ibfk_2` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_booking_room_ibfk_3` FOREIGN KEY (`roomnumber_id`) REFERENCES `tbl_rooms` (`roomnumber_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_charges_master`
 --
 ALTER TABLE `tbl_charges_master`
-  ADD CONSTRAINT `tbl_charges_master_ibfk_1` FOREIGN KEY (`charges_category_id`) REFERENCES `tbl_charges_category` (`charges_category_id`);
+  ADD CONSTRAINT `tbl_charges_master_ibfk_1` FOREIGN KEY (`charges_category_id`) REFERENCES `tbl_charges_category` (`charges_category_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_check_payment`
 --
 ALTER TABLE `tbl_check_payment`
-  ADD CONSTRAINT `tbl_check_payment_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `tbl_invoice` (`invoice_id`);
+  ADD CONSTRAINT `tbl_check_payment_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `tbl_invoice` (`invoice_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_customers`
 --
 ALTER TABLE `tbl_customers`
-  ADD CONSTRAINT `tbl_customers_ibfk_2` FOREIGN KEY (`identification_id`) REFERENCES `tbl_customer_identification` (`identification_id`),
-  ADD CONSTRAINT `tbl_customers_ibfk_3` FOREIGN KEY (`customers_online_id`) REFERENCES `tbl_customers_online` (`customers_online_id`),
-  ADD CONSTRAINT `tbl_customers_ibfk_4` FOREIGN KEY (`nationality_id`) REFERENCES `tbl_nationality` (`nationality_id`);
+  ADD CONSTRAINT `tbl_customers_ibfk_2` FOREIGN KEY (`identification_id`) REFERENCES `tbl_customer_identification` (`identification_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_customers_ibfk_3` FOREIGN KEY (`customers_online_id`) REFERENCES `tbl_customers_online` (`customers_online_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_customers_ibfk_4` FOREIGN KEY (`nationality_id`) REFERENCES `tbl_nationality` (`nationality_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_customersreviews`
 --
 ALTER TABLE `tbl_customersreviews`
-  ADD CONSTRAINT `tbl_customersreviews_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`);
+  ADD CONSTRAINT `tbl_customersreviews_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_customers_walk_in`
 --
 ALTER TABLE `tbl_customers_walk_in`
-  ADD CONSTRAINT `tbl_customers_walk_in_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`);
+  ADD CONSTRAINT `tbl_customers_walk_in_ibfk_1` FOREIGN KEY (`customers_id`) REFERENCES `tbl_customers` (`customers_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_employee`
 --
 ALTER TABLE `tbl_employee`
-  ADD CONSTRAINT `tbl_employee_ibfk_1` FOREIGN KEY (`employee_user_level_id`) REFERENCES `tbl_user_level` (`userlevel_id`);
+  ADD CONSTRAINT `tbl_employee_ibfk_1` FOREIGN KEY (`employee_user_level_id`) REFERENCES `tbl_user_level` (`userlevel_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_imagesroommaster`
 --
 ALTER TABLE `tbl_imagesroommaster`
-  ADD CONSTRAINT `tbl_imagesroommaster_ibfk_1` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`);
+  ADD CONSTRAINT `tbl_imagesroommaster_ibfk_1` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_invoice`
 --
 ALTER TABLE `tbl_invoice`
-  ADD CONSTRAINT `tbl_invoice_ibfk_1` FOREIGN KEY (`billing_id`) REFERENCES `tbl_billing` (`billing_id`),
-  ADD CONSTRAINT `tbl_invoice_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`),
-  ADD CONSTRAINT `tbl_invoice_ibfk_3` FOREIGN KEY (`payment_method_id`) REFERENCES `tbl_payment_method` (`payment_method_id`),
-  ADD CONSTRAINT `tbl_invoice_ibfk_4` FOREIGN KEY (`invoice_status_id`) REFERENCES `tbl_invoice_status` (`invoice_status_id`);
+  ADD CONSTRAINT `tbl_invoice_ibfk_1` FOREIGN KEY (`billing_id`) REFERENCES `tbl_billing` (`billing_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_invoice_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_invoice_ibfk_3` FOREIGN KEY (`payment_method_id`) REFERENCES `tbl_payment_method` (`payment_method_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_invoice_ibfk_4` FOREIGN KEY (`invoice_status_id`) REFERENCES `tbl_invoice_status` (`invoice_status_id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_lost_found`
 --
 ALTER TABLE `tbl_lost_found`
-  ADD CONSTRAINT `tbl_lost_found_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`);
+  ADD CONSTRAINT `tbl_lost_found_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_online_payment`
 --
 ALTER TABLE `tbl_online_payment`
-  ADD CONSTRAINT `tbl_online_payment_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `tbl_invoice` (`invoice_id`);
+  ADD CONSTRAINT `tbl_online_payment_ibfk_1` FOREIGN KEY (`invoice_id`) REFERENCES `tbl_invoice` (`invoice_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_rooms`
 --
 ALTER TABLE `tbl_rooms`
-  ADD CONSTRAINT `tbl_rooms_ibfk_2` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`),
-  ADD CONSTRAINT `tbl_rooms_ibfk_4` FOREIGN KEY (`room_status_id`) REFERENCES `tbl_status_types` (`status_id`);
+  ADD CONSTRAINT `tbl_rooms_ibfk_2` FOREIGN KEY (`roomtype_id`) REFERENCES `tbl_roomtype` (`roomtype_id`) ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_rooms_ibfk_4` FOREIGN KEY (`room_status_id`) REFERENCES `tbl_status_types` (`status_id`) ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_room_amenities`
 --
 ALTER TABLE `tbl_room_amenities`
-  ADD CONSTRAINT `tbl_room_amenities_ibfk_1` FOREIGN KEY (`roomnumber_id`) REFERENCES `tbl_roomtype` (`roomtype_id`),
-  ADD CONSTRAINT `tbl_room_amenities_ibfk_2` FOREIGN KEY (`room_amenities_master_id`) REFERENCES `tbl_room_amenities_master` (`room_amenities_master_id`),
-  ADD CONSTRAINT `tbl_room_amenities_ibfk_3` FOREIGN KEY (`roomnumber_id`) REFERENCES `tbl_rooms` (`roomnumber_id`);
+  ADD CONSTRAINT `tbl_room_amenities_ibfk_2` FOREIGN KEY (`room_amenities_master_id`) REFERENCES `tbl_room_amenities_master` (`room_amenities_master_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_room_amenities_ibfk_3` FOREIGN KEY (`roomnumber_id`) REFERENCES `tbl_rooms` (`roomnumber_id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 --
 -- Constraints for table `tbl_visitorlogs`
 --
 ALTER TABLE `tbl_visitorlogs`
-  ADD CONSTRAINT `tbl_visitorlogs_ibfk_1` FOREIGN KEY (`visitorapproval_id`) REFERENCES `tbl_visitorapproval` (`visitorapproval_id`),
-  ADD CONSTRAINT `tbl_visitorlogs_ibfk_2` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`),
-  ADD CONSTRAINT `tbl_visitorlogs_ibfk_3` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`);
+  ADD CONSTRAINT `tbl_visitorlogs_ibfk_1` FOREIGN KEY (`visitorapproval_id`) REFERENCES `tbl_visitorapproval` (`visitorapproval_id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_visitorlogs_ibfk_2` FOREIGN KEY (`booking_id`) REFERENCES `tbl_booking` (`booking_id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `tbl_visitorlogs_ibfk_3` FOREIGN KEY (`employee_id`) REFERENCES `tbl_employee` (`employee_id`) ON DELETE SET NULL ON UPDATE CASCADE;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
