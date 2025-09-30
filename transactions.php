@@ -338,7 +338,7 @@ class Transactions
         $billing_ids = $json["billing_ids"];
         $employee_id = $json["employee_id"];
         $payment_method_id = $json["payment_method_id"];
-        $invoice_status_id = $json["invoice_status_id"] ?? 1;
+        $invoice_status_id = 1; // Always set to Complete for checkout scenarios
         $discount_id = $json["discount_id"] ?? null;
         $vat_rate = $json["vat_rate"] ?? 0.12; // Default 12% VAT
         $downpayment = $json["downpayment"] ?? 0;
