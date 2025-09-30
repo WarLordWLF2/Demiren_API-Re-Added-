@@ -586,24 +586,23 @@ class Admin_Functions
 
             // 4. Insert into tbl_booking
             $reference_no = "REF" . date("YmdHis") . rand(100, 999); // Generate unique reference number
-            // Use Asia/Manila timezone and set check-in time to current local time; check-out = same time minus 2 hours (22-hour stay)
-            date_default_timezone_set('Asia/Manila');
-            $time_part = date('H:i:s');
+            // Set fixed times: 2:00 PM check-in, 12:00 PM check-out
+            $checkin_time = '14:00:00'; // 2:00 PM
+            $checkout_time = '12:00:00'; // 12:00 PM
             $stmt = $conn->prepare("INSERT INTO tbl_booking
-                (customers_id, customers_walk_in_id, adult, children, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
-                VALUES (:customers_id, :walkin_id, :adult, :children, :guests, :total_amount, :downpayment, :ref_no, CONCAT(:checkin, ' ', :time_part), DATE_SUB(CONCAT(:checkout, ' ', :time_part), INTERVAL 2 HOUR), NOW(), 0)");
+                (customers_id, customers_walk_in_id, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
+                VALUES (:customers_id, :walkin_id, :guests, :total_amount, :downpayment, :ref_no, CONCAT(:checkin, ' ', :checkin_time), CONCAT(:checkout, ' ', :checkout_time), NOW(), 0)");
             $stmt->execute([
                 ':customers_id' => $customerId,
                 ':walkin_id' => $walkInId,
-                ':adult' => $data['adult'],
-                ':children' => $data['children'],
                 ':guests' => $data['adult'] + $data['children'],
                 ':total_amount' => $data['billing']['total'],
                 ':downpayment' => $data['payment']['amountPaid'],
                 ':ref_no' => $reference_no,
                 ':checkin' => $data['checkIn'],
                 ':checkout' => $data['checkOut'],
-                ':time_part' => $time_part
+                ':checkin_time' => $checkin_time,
+                ':checkout_time' => $checkout_time
             ]);
             $bookingId = $conn->lastInsertId();
 
@@ -625,12 +624,14 @@ class Admin_Functions
                 $roomtype_id = $stmtRoomType->fetchColumn();
 
                 // Insert into tbl_booking_room
-                $stmt = $conn->prepare("INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id)
-                    VALUES (:booking_id, :roomtype_id, :roomnumber_id)");
+                $stmt = $conn->prepare("INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id, bookingRoom_adult, bookingRoom_children)
+                    VALUES (:booking_id, :roomtype_id, :roomnumber_id, :adult, :children)");
                 $stmt->execute([
                     ':booking_id' => $bookingId,
                     ':roomtype_id' => $roomtype_id,
-                    ':roomnumber_id' => $room['roomnumber_id']
+                    ':roomnumber_id' => $room['roomnumber_id'],
+                    ':adult' => $data['adult'],
+                    ':children' => $data['children']
                 ]);
 
                 // Update room status to Occupied (status_id = 1)
@@ -815,15 +816,19 @@ class Admin_Functions
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdateRoom = $conn->prepare($sqlUpdateRoom);
 
-            // 0️⃣ Normalize times to Asia/Manila and enforce 22-hour stay
-            date_default_timezone_set('Asia/Manila');
-            $time_part = date('H:i:s');
+            // 0️⃣ Set fixed times: 2:00 PM check-in, 12:00 PM check-out
+            $checkin_time = '14:00:00'; // 2:00 PM
+            $checkout_time = '12:00:00'; // 12:00 PM
             $stmtTime = $conn->prepare("UPDATE tbl_booking 
                 SET 
-                    booking_checkin_dateandtime = CONCAT(DATE(booking_checkin_dateandtime), ' ', :time_part),
-                    booking_checkout_dateandtime = DATE_SUB(CONCAT(DATE(booking_checkout_dateandtime), ' ', :time_part), INTERVAL 2 HOUR)
+                    booking_checkin_dateandtime = CONCAT(DATE(booking_checkin_dateandtime), ' ', :checkin_time),
+                    booking_checkout_dateandtime = CONCAT(DATE(booking_checkout_dateandtime), ' ', :checkout_time)
                 WHERE booking_id = :booking_id");
-            $stmtTime->execute([':booking_id' => $bookingId, ':time_part' => $time_part]);
+            $stmtTime->execute([
+                ':booking_id' => $bookingId, 
+                ':checkin_time' => $checkin_time,
+                ':checkout_time' => $checkout_time
+            ]);
 
             // 2️⃣ APPROVAL ROOM ASSIGNMENT LOGIC: Replace ANY existing room for this booking
             foreach ($roomIds as $newRoomId) {
@@ -2470,6 +2475,288 @@ class Admin_Functions
             ]);
         }
     }
+
+    function extendMultiRoomBookingWithPayment($data)
+    {
+        include "connection.php";
+        
+        try {
+            $conn->beginTransaction();
+            
+            $booking_id = intval($data["booking_id"]);
+            $employee_id = intval($data["employee_id"]);
+            $new_checkout_date = $data["new_checkout_date"];
+            $additional_nights = intval($data["additional_nights"]);
+            $additional_amount = floatval($data["additional_amount"]);
+            $payment_amount = floatval($data["payment_amount"]);
+            $payment_method_id = intval($data["payment_method_id"]);
+            $room_price = floatval($data["room_price"]);
+            $selected_room_id = intval($data["selected_room_id"]);
+            $selected_room_type = $data["selected_room_type"];
+            
+            // Check if original booking exists
+            $checkBooking = $conn->prepare("
+                SELECT b.*, 
+                       COALESCE(c.customers_fname, cwi.customers_walk_in_fname) as customer_fname,
+                       COALESCE(c.customers_lname, cwi.customers_walk_in_lname) as customer_lname,
+                       COALESCE(c.customers_email, cwi.customers_walk_in_email) as customer_email,
+                       COALESCE(c.customers_phone, cwi.customers_walk_in_phone) as customer_phone,
+                       COALESCE(c.customers_address, cwi.customers_walk_in_address) as customer_address
+                FROM tbl_booking b
+                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_customers_walk_in cwi ON b.customers_walk_in_id = cwi.customers_walk_in_id
+                WHERE b.booking_id = :booking_id
+            ");
+            $checkBooking->execute([':booking_id' => $booking_id]);
+            $originalBooking = $checkBooking->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$originalBooking) {
+                throw new Exception("Original booking with ID $booking_id not found");
+            }
+            
+            // Get room type ID for the selected room
+            $getRoomType = $conn->prepare("
+                SELECT roomtype_id FROM tbl_rooms WHERE roomnumber_id = :room_id
+            ");
+            $getRoomType->execute([':room_id' => $selected_room_id]);
+            $roomTypeId = $getRoomType->fetchColumn();
+            
+            if (!$roomTypeId) {
+                throw new Exception("Room type not found for room ID $selected_room_id");
+            }
+            
+            // Check if there's already an extension for this specific room
+            $checkExistingExtension = $conn->prepare("
+                SELECT b.booking_id, b.reference_no, b.booking_checkout_dateandtime
+                FROM tbl_booking b
+                INNER JOIN tbl_booking_room br ON b.booking_id = br.booking_id
+                WHERE b.reference_no LIKE :pattern
+                AND br.roomnumber_id = :room_id
+                ORDER BY b.booking_checkout_dateandtime DESC
+                LIMIT 1
+            ");
+            $pattern = $originalBooking['reference_no'] . '-EXT%';
+            $checkExistingExtension->execute([
+                ':pattern' => $pattern,
+                ':room_id' => $selected_room_id
+            ]);
+            $existingExtension = $checkExistingExtension->fetch(PDO::FETCH_ASSOC);
+            
+            if ($existingExtension) {
+                // Update existing extension instead of creating new one
+                $updateExtension = $conn->prepare("
+                    UPDATE tbl_booking 
+                    SET booking_checkout_dateandtime = :new_checkout_date,
+                        booking_totalAmount = booking_totalAmount + :additional_amount,
+                        booking_downpayment = booking_downpayment + :payment_amount
+                    WHERE booking_id = :booking_id
+                ");
+                
+                $updateExtension->execute([
+                    ':new_checkout_date' => $new_checkout_date,
+                    ':additional_amount' => $additional_amount,
+                    ':payment_amount' => $payment_amount,
+                    ':booking_id' => $existingExtension['booking_id']
+                ]);
+                
+                // Note: Original booking is NOT updated to keep it separate from room extensions
+                
+                $newBookingId = $existingExtension['booking_id'];
+                $newReferenceNo = $existingExtension['reference_no'];
+                $isNewBooking = false;
+            } else {
+                // Generate new extension reference number
+                $originalRef = $originalBooking['reference_no'];
+                $extensionCount = 1;
+                
+                // Check if there are existing extensions for this booking
+                $checkExtensions = $conn->prepare("
+                    SELECT reference_no FROM tbl_booking 
+                    WHERE reference_no LIKE :pattern
+                    ORDER BY reference_no DESC LIMIT 1
+                ");
+                $pattern = $originalRef . '-EXT%';
+                $checkExtensions->execute([':pattern' => $pattern]);
+                $lastExtension = $checkExtensions->fetchColumn();
+                
+                if ($lastExtension) {
+                    // Extract the extension number and increment
+                    preg_match('/-EXT(\d+)$/', $lastExtension, $matches);
+                    if (isset($matches[1])) {
+                        $extensionCount = intval($matches[1]) + 1;
+                    }
+                }
+                
+                $newReferenceNo = $originalRef . '-EXT' . str_pad($extensionCount, 3, '0', STR_PAD_LEFT);
+                $isNewBooking = true;
+            }
+            
+            if ($isNewBooking) {
+                // Create new booking record for the extended room
+                $createNewBooking = $conn->prepare("
+                    INSERT INTO tbl_booking 
+                    (customers_id, customers_walk_in_id, guests_amnt, booking_downpayment, 
+                     booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
+                     booking_totalAmount, booking_isArchive, reference_no)
+                    VALUES 
+                    (:customers_id, :customers_walk_in_id, :guests_amnt, :booking_downpayment, 
+                     :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), 
+                     :booking_totalAmount, 0, :reference_no)
+                ");
+                
+                // Set check-in time to 2:00 PM (14:00:00)
+                $checkinDateTime = new DateTime($originalBooking['booking_checkin_dateandtime']);
+                $checkinDateTime->setTime(14, 0, 0); // 2:00 PM
+                
+                $createNewBooking->execute([
+                    ':customers_id' => $originalBooking['customers_id'],
+                    ':customers_walk_in_id' => $originalBooking['customers_walk_in_id'],
+                    ':guests_amnt' => 1, // Single room extension
+                    ':booking_downpayment' => $payment_amount,
+                    ':booking_checkin_dateandtime' => $checkinDateTime->format('Y-m-d H:i:s'), // 2:00 PM check-in
+                    ':booking_checkout_dateandtime' => $new_checkout_date,
+                    ':booking_totalAmount' => $additional_amount,
+                    ':reference_no' => $newReferenceNo
+                ]);
+                
+                $newBookingId = $conn->lastInsertId();
+                
+                // Create booking room record for the new booking
+                $createBookingRoom = $conn->prepare("
+                    INSERT INTO tbl_booking_room 
+                    (booking_id, roomtype_id, roomnumber_id, bookingRoom_adult, bookingRoom_children)
+                    VALUES (:booking_id, :roomtype_id, :roomnumber_id, :adult, :children)
+                ");
+                
+                $createBookingRoom->execute([
+                    ':booking_id' => $newBookingId,
+                    ':roomtype_id' => $roomTypeId,
+                    ':roomnumber_id' => $selected_room_id,
+                    ':adult' => 1,
+                    ':children' => 0
+                ]);
+                
+                // Create booking history for the new booking
+                $createHistory = $conn->prepare("
+                    INSERT INTO tbl_booking_history 
+                    (booking_id, employee_id, status_id, updated_at)
+                    VALUES (:booking_id, :employee_id, 2, NOW())
+                ");
+                
+                $createHistory->execute([
+                    ':booking_id' => $newBookingId,
+                    ':employee_id' => $employee_id
+                ]);
+                
+                // Note: Original booking is NOT updated to keep it separate from room extensions
+            }
+            
+            // Update room status to Occupied for the extended period
+            $updateRoomStatus = $conn->prepare("
+                UPDATE tbl_rooms 
+                SET room_status_id = 1 
+                WHERE roomnumber_id = :room_id
+            ");
+            $updateRoomStatus->execute([':room_id' => $selected_room_id]);
+            
+            // Create charges master entry for room extension if it doesn't exist
+            $checkChargesMaster = $conn->prepare("
+                SELECT charges_master_id 
+                FROM tbl_charges_master 
+                WHERE charges_master_name = 'Room Extension' 
+                AND charges_category_id = 1
+                LIMIT 1
+            ");
+            $checkChargesMaster->execute();
+            $chargesMaster = $checkChargesMaster->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$chargesMaster) {
+                $createChargesMaster = $conn->prepare("
+                    INSERT INTO tbl_charges_master 
+                    (charges_category_id, charges_master_name, charges_master_price, charges_master_status_id)
+                    VALUES (1, 'Room Extension', :room_price, 1)
+                ");
+                $createChargesMaster->execute([':room_price' => $room_price]);
+                $charges_master_id = $conn->lastInsertId();
+            } else {
+                $charges_master_id = $chargesMaster['charges_master_id'];
+            }
+            
+            // Get the booking room ID for the new booking
+            $getNewBookingRoom = $conn->prepare("
+                SELECT booking_room_id FROM tbl_booking_room 
+                WHERE booking_id = :booking_id AND roomnumber_id = :room_id
+            ");
+            $getNewBookingRoom->execute([
+                ':booking_id' => $newBookingId,
+                ':room_id' => $selected_room_id
+            ]);
+            $newBookingRoomId = $getNewBookingRoom->fetchColumn();
+            
+            // Insert booking charges for the extension
+            $insertBookingCharges = $conn->prepare("
+                INSERT INTO tbl_booking_charges 
+                (charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total, booking_charge_status)
+                VALUES (:charges_master_id, :booking_room_id, :room_price, :additional_nights, :additional_amount, 2)
+            ");
+            $insertBookingCharges->execute([
+                ':charges_master_id' => $charges_master_id,
+                ':booking_room_id' => $newBookingRoomId,
+                ':room_price' => $room_price,
+                ':additional_nights' => $additional_nights,
+                ':additional_amount' => $additional_amount
+            ]);
+            
+            $booking_charges_id = $conn->lastInsertId();
+            
+            // If payment was made, create billing record
+            if ($payment_amount > 0) {
+                $insertBilling = $conn->prepare("
+                    INSERT INTO tbl_billing 
+                    (booking_id, booking_charges_id, employee_id, payment_method_id, billing_dateandtime, 
+                     billing_invoice_number, billing_downpayment, billing_vat, billing_total_amount, billing_balance)
+                    VALUES (:booking_id, :booking_charges_id, :employee_id, :payment_method_id, NOW(),
+                            :invoice_number, :payment_amount, 0, :payment_amount, 0)
+                ");
+                $invoice_number = "EXT" . date("YmdHis") . rand(100, 999);
+                $insertBilling->execute([
+                    ':booking_id' => $newBookingId,
+                    ':booking_charges_id' => $booking_charges_id,
+                    ':employee_id' => $employee_id,
+                    ':payment_method_id' => $payment_method_id,
+                    ':invoice_number' => $invoice_number,
+                    ':payment_amount' => $payment_amount
+                ]);
+            }
+            
+            $conn->commit();
+            
+            $message = $isNewBooking ? 
+                "Room extension booking created successfully" : 
+                "Existing room extension updated successfully";
+                
+            return json_encode([
+                "success" => true,
+                "message" => $message,
+                "original_booking_id" => $booking_id,
+                "original_reference_no" => $originalBooking['reference_no'],
+                "extension_booking_id" => $newBookingId,
+                "extension_reference_no" => $newReferenceNo,
+                "room_number" => $selected_room_id,
+                "additional_amount" => $additional_amount,
+                "payment_amount" => $payment_amount,
+                "remaining_balance" => $additional_amount - $payment_amount,
+                "is_new_booking" => $isNewBooking
+            ]);
+            
+        } catch (Exception $e) {
+            $conn->rollBack();
+            return json_encode([
+                "success" => false,
+                "error" => $e->getMessage()
+            ]);
+        }
+    }
 }
 
 
@@ -2721,9 +3008,12 @@ switch ($methodType) {
         break;
     
     // -------- Booking Extension with Payment -------- //
-    case "extendBookingWithPayment":
-        echo $AdminClass->extendBookingWithPayment($jsonData);
-        break;
+        case "extendBookingWithPayment":
+            echo $AdminClass->extendBookingWithPayment($jsonData);
+            break;
+        case "extendMultiRoomBookingWithPayment":
+            echo $AdminClass->extendMultiRoomBookingWithPayment($jsonData);
+            break;
 }
 
 
