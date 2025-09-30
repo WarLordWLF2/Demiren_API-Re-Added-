@@ -658,7 +658,7 @@ class Admin_Functions
 
             $conn->commit();
             return json_encode([
-                'status' => 'success', 
+                'status' => 'success',
                 'message' => 'Walk-in booking inserted successfully.',
                 'booking_id' => $bookingId,
                 'reference_no' => $reference_no,
@@ -825,7 +825,7 @@ class Admin_Functions
                     booking_checkout_dateandtime = CONCAT(DATE(booking_checkout_dateandtime), ' ', :checkout_time)
                 WHERE booking_id = :booking_id");
             $stmtTime->execute([
-                ':booking_id' => $bookingId, 
+                ':booking_id' => $bookingId,
                 ':checkin_time' => $checkin_time,
                 ':checkout_time' => $checkout_time
             ]);
@@ -837,7 +837,7 @@ class Admin_Functions
                     ':booking_id' => $bookingId,
                     ':room_id'    => $newRoomId
                 ]);
-                
+
                 if ($stmtCheckExisting->fetchColumn() > 0) {
                     // Room already assigned, just update its status
                     $stmtUpdateRoom->execute([
@@ -866,7 +866,7 @@ class Admin_Functions
                     $old_room_id = $roomToReplace['roomnumber_id'];
                     $freeOldRoomStmt = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 3 WHERE roomnumber_id = ?");
                     $freeOldRoomStmt->execute([$old_room_id]);
-                    
+
                     // Assign the new room in place of existing one
                     $assignNewRoomStmt = $conn->prepare("
                         UPDATE tbl_booking_room 
@@ -1972,7 +1972,7 @@ class Admin_Functions
     function getAmenityRequests()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     bc.booking_charges_id as request_id,
                     b.booking_id,
@@ -2012,7 +2012,7 @@ class Admin_Functions
                 LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
                 WHERE b.booking_isArchive = 0
                 ORDER BY bc.booking_charges_id DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2022,11 +2022,11 @@ class Admin_Functions
     {
         include "connection.php";
         // $data is already an array from the switch statement
-        
+
         $request_id = $data['request_id'];
         $employee_id = $data['employee_id'] ?? 1; // Default to admin
         $admin_notes = $data['admin_notes'] ?? '';
-        
+
         try {
             // Update the booking_charge_status to approved (2)
             $updateRequest = $conn->prepare("
@@ -2036,9 +2036,8 @@ class Admin_Functions
             ");
             $updateRequest->bindParam(':request_id', $request_id);
             $updateRequest->execute();
-            
+
             return $updateRequest->rowCount() > 0 ? 1 : 0;
-            
         } catch (Exception $e) {
             return 0;
         }
@@ -2048,11 +2047,11 @@ class Admin_Functions
     {
         include "connection.php";
         // $data is already an array from the switch statement
-        
+
         $request_id = $data['request_id'];
         $employee_id = $data['employee_id'] ?? 1; // Default to admin
         $admin_notes = $data['admin_notes'] ?? '';
-        
+
         try {
             // Update the booking_charge_status to rejected/cancelled (3)
             $stmt = $conn->prepare("
@@ -2062,9 +2061,8 @@ class Admin_Functions
             ");
             $stmt->bindParam(':request_id', $request_id);
             $stmt->execute();
-            
+
             return $stmt->rowCount() > 0 ? 1 : 0;
-            
         } catch (Exception $e) {
             return 0;
         }
@@ -2073,7 +2071,7 @@ class Admin_Functions
     function getAmenityRequestStats()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     COUNT(*) as total_requests,
                     SUM(CASE WHEN bc.booking_charge_status = 1 THEN 1 ELSE 0 END) as pending_requests,
@@ -2089,7 +2087,7 @@ class Admin_Functions
                 INNER JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
                 INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
                 WHERE b.booking_isArchive = 0";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -2099,7 +2097,7 @@ class Admin_Functions
     function getAvailableCharges()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     cm.charges_master_id,
                     cm.charges_master_name,
@@ -2110,7 +2108,7 @@ class Admin_Functions
                 LEFT JOIN tbl_charges_category cc ON cm.charges_category_id = cc.charges_category_id
                 WHERE cm.charges_master_status_id = 1
                 ORDER BY cc.charges_category_name, cm.charges_master_name";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2119,7 +2117,7 @@ class Admin_Functions
     function getActiveBookings()
     {
         include "connection.php";
-        
+
         $sql = "SELECT DISTINCT
                     b.booking_id,
                     b.reference_no,
@@ -2151,7 +2149,7 @@ class Admin_Functions
                 ) IN (2, 5) -- Approved or Checked-In status
                 GROUP BY b.booking_id
                 ORDER BY b.booking_checkin_dateandtime DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2160,7 +2158,7 @@ class Admin_Functions
     function getBookingRooms()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     br.booking_room_id,
                     br.booking_id,
@@ -2201,7 +2199,7 @@ class Admin_Functions
                     LIMIT 1
                 ) IN (2, 5) -- Approved or Checked-In status
                 ORDER BY b.booking_checkin_dateandtime DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2210,7 +2208,7 @@ class Admin_Functions
     function addAmenityRequest($data)
     {
         include "connection.php";
-        
+
         try {
             // Accept either booking_room_id (new) or booking_id (legacy)
             if (isset($data['booking_room_id'])) {
@@ -2223,34 +2221,34 @@ class Admin_Functions
                 $booking_room_stmt->bindParam(':booking_id', $booking_id);
                 $booking_room_stmt->execute();
                 $booking_room = $booking_room_stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if (!$booking_room) {
                     return json_encode(["success" => false, "message" => "No booking room found for this booking"]);
                 }
-                
+
                 $booking_room_id = $booking_room['booking_room_id'];
             }
-            
+
             $amenities = $data['amenities']; // Array of amenities
             $booking_charge_status = $data['booking_charge_status'] ?? 1; // Default to Pending
-            
+
             // Debug logging
             error_log("addAmenityRequest called with data: " . json_encode($data));
             error_log("Using booking_room_id: " . $booking_room_id);
             error_log("Number of amenities: " . count($amenities));
-            
+
             // Start transaction for bulk insert
             $conn->beginTransaction();
-            
+
             $inserted_count = 0;
             foreach ($amenities as $amenity) {
                 $charges_master_id = $amenity['charges_master_id'];
                 $booking_charges_price = $amenity['booking_charges_price'];
                 $booking_charges_quantity = $amenity['booking_charges_quantity'];
-                
+
                 // Calculate total for this amenity
                 $booking_charges_total = $booking_charges_price * $booking_charges_quantity;
-                
+
                 // Insert into tbl_booking_charges
                 $sql = "INSERT INTO tbl_booking_charges (
                             booking_room_id,
@@ -2267,7 +2265,7 @@ class Admin_Functions
                             :booking_charges_total,
                             :booking_charge_status
                         )";
-                
+
                 $stmt = $conn->prepare($sql);
                 $stmt->bindParam(':booking_room_id', $booking_room_id);
                 $stmt->bindParam(':charges_master_id', $charges_master_id);
@@ -2275,20 +2273,19 @@ class Admin_Functions
                 $stmt->bindParam(':booking_charges_quantity', $booking_charges_quantity);
                 $stmt->bindParam(':booking_charges_total', $booking_charges_total);
                 $stmt->bindParam(':booking_charge_status', $booking_charge_status);
-                
+
                 if ($stmt->execute()) {
                     $inserted_count++;
                 }
             }
-            
+
             // Commit transaction
             $conn->commit();
-            
+
             return json_encode([
-                "success" => true, 
+                "success" => true,
                 "message" => "Successfully added {$inserted_count} amenity request(s)"
             ]);
-            
         } catch (Exception $e) {
             // Rollback transaction on error
             $conn->rollback();
@@ -2302,23 +2299,22 @@ class Admin_Functions
     function getPendingAmenityCount()
     {
         include "connection.php";
-        
+
         try {
             // Count pending amenity requests from tbl_booking_charges
             // Status 1 = Pending, 2 = Delivered, 3 = Cancelled
             $sql = "SELECT COUNT(*) as pending_count 
                     FROM tbl_booking_charges 
                     WHERE booking_charge_status = 1";
-            
+
             $stmt = $conn->prepare($sql);
             $stmt->execute();
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             return [
                 "success" => true,
                 "pending_count" => (int)$result['pending_count']
             ];
-            
         } catch (Exception $e) {
             return [
                 "success" => false,
@@ -2332,10 +2328,10 @@ class Admin_Functions
     function extendBookingWithPayment($data)
     {
         include "connection.php";
-        
+
         try {
             $conn->beginTransaction();
-            
+
             $booking_id = intval($data["booking_id"]);
             $employee_id = intval($data["employee_id"]);
             $new_checkout_date = $data["new_checkout_date"];
@@ -2344,16 +2340,16 @@ class Admin_Functions
             $payment_amount = floatval($data["payment_amount"]);
             $payment_method_id = intval($data["payment_method_id"]);
             $room_price = floatval($data["room_price"]);
-            
+
             // Check if booking exists
             $checkBooking = $conn->prepare("SELECT booking_id, booking_checkout_dateandtime FROM tbl_booking WHERE booking_id = :booking_id");
             $checkBooking->execute([':booking_id' => $booking_id]);
             $existingBooking = $checkBooking->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$existingBooking) {
                 throw new Exception("Booking with ID $booking_id not found");
             }
-            
+
             // 1. Update booking checkout date and amounts
             $updateBooking = $conn->prepare("
                 UPDATE tbl_booking 
@@ -2369,8 +2365,8 @@ class Admin_Functions
                 ':payment_amount' => $payment_amount,
                 ':booking_id' => $booking_id
             ]);
-            
-            
+
+
             // 2. Get booking room information
             $getBookingRoom = $conn->prepare("
                 SELECT booking_room_id, roomtype_id 
@@ -2380,11 +2376,11 @@ class Admin_Functions
             ");
             $getBookingRoom->execute([':booking_id' => $booking_id]);
             $bookingRoom = $getBookingRoom->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$bookingRoom) {
                 throw new Exception("No booking room found for this booking");
             }
-            
+
             // 3. Create a charges master entry for room extension if it doesn't exist
             $checkChargesMaster = $conn->prepare("
                 SELECT charges_master_id 
@@ -2395,7 +2391,7 @@ class Admin_Functions
             ");
             $checkChargesMaster->execute();
             $chargesMaster = $checkChargesMaster->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$chargesMaster) {
                 // Create room extension charge
                 $createChargesMaster = $conn->prepare("
@@ -2408,7 +2404,7 @@ class Admin_Functions
             } else {
                 $charges_master_id = $chargesMaster['charges_master_id'];
             }
-            
+
             // 4. Insert booking charges for the extension
             $insertBookingCharges = $conn->prepare("
                 INSERT INTO tbl_booking_charges 
@@ -2422,9 +2418,9 @@ class Admin_Functions
                 ':additional_nights' => $additional_nights,
                 ':additional_amount' => $additional_amount
             ]);
-            
+
             $booking_charges_id = $conn->lastInsertId();
-            
+
             // 5. If payment was made, create billing record
             if ($payment_amount > 0) {
                 $insertBilling = $conn->prepare("
@@ -2444,7 +2440,7 @@ class Admin_Functions
                     ':payment_amount' => $payment_amount
                 ]);
             }
-            
+
             // 6. Insert booking history for extension
             $insertHistory = $conn->prepare("
                 INSERT INTO tbl_booking_history 
@@ -2455,9 +2451,9 @@ class Admin_Functions
                 ':booking_id' => $booking_id,
                 ':employee_id' => $employee_id
             ]);
-            
+
             $conn->commit();
-            
+
             return json_encode([
                 "success" => true,
                 "message" => "Booking extended successfully",
@@ -2466,7 +2462,6 @@ class Admin_Functions
                 "payment_amount" => $payment_amount,
                 "remaining_balance" => $additional_amount - $payment_amount
             ]);
-            
         } catch (Exception $e) {
             $conn->rollBack();
             return json_encode([
@@ -2479,10 +2474,10 @@ class Admin_Functions
     function extendMultiRoomBookingWithPayment($data)
     {
         include "connection.php";
-        
+
         try {
             $conn->beginTransaction();
-            
+
             $booking_id = intval($data["booking_id"]);
             $employee_id = intval($data["employee_id"]);
             $new_checkout_date = $data["new_checkout_date"];
@@ -2493,7 +2488,7 @@ class Admin_Functions
             $room_price = floatval($data["room_price"]);
             $selected_room_id = intval($data["selected_room_id"]);
             $selected_room_type = $data["selected_room_type"];
-            
+
             // Check if original booking exists
             $checkBooking = $conn->prepare("
                 SELECT b.*, 
@@ -2509,22 +2504,22 @@ class Admin_Functions
             ");
             $checkBooking->execute([':booking_id' => $booking_id]);
             $originalBooking = $checkBooking->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$originalBooking) {
                 throw new Exception("Original booking with ID $booking_id not found");
             }
-            
+
             // Get room type ID for the selected room
             $getRoomType = $conn->prepare("
                 SELECT roomtype_id FROM tbl_rooms WHERE roomnumber_id = :room_id
             ");
             $getRoomType->execute([':room_id' => $selected_room_id]);
             $roomTypeId = $getRoomType->fetchColumn();
-            
+
             if (!$roomTypeId) {
                 throw new Exception("Room type not found for room ID $selected_room_id");
             }
-            
+
             // Check if there's already an extension for this specific room
             $checkExistingExtension = $conn->prepare("
                 SELECT b.booking_id, b.reference_no, b.booking_checkout_dateandtime
@@ -2541,7 +2536,7 @@ class Admin_Functions
                 ':room_id' => $selected_room_id
             ]);
             $existingExtension = $checkExistingExtension->fetch(PDO::FETCH_ASSOC);
-            
+
             if ($existingExtension) {
                 // Update existing extension instead of creating new one
                 $updateExtension = $conn->prepare("
@@ -2551,16 +2546,16 @@ class Admin_Functions
                         booking_downpayment = booking_downpayment + :payment_amount
                     WHERE booking_id = :booking_id
                 ");
-                
+
                 $updateExtension->execute([
                     ':new_checkout_date' => $new_checkout_date,
                     ':additional_amount' => $additional_amount,
                     ':payment_amount' => $payment_amount,
                     ':booking_id' => $existingExtension['booking_id']
                 ]);
-                
+
                 // Note: Original booking is NOT updated to keep it separate from room extensions
-                
+
                 $newBookingId = $existingExtension['booking_id'];
                 $newReferenceNo = $existingExtension['reference_no'];
                 $isNewBooking = false;
@@ -2568,7 +2563,7 @@ class Admin_Functions
                 // Generate new extension reference number
                 $originalRef = $originalBooking['reference_no'];
                 $extensionCount = 1;
-                
+
                 // Check if there are existing extensions for this booking
                 $checkExtensions = $conn->prepare("
                     SELECT reference_no FROM tbl_booking 
@@ -2578,7 +2573,7 @@ class Admin_Functions
                 $pattern = $originalRef . '-EXT%';
                 $checkExtensions->execute([':pattern' => $pattern]);
                 $lastExtension = $checkExtensions->fetchColumn();
-                
+
                 if ($lastExtension) {
                     // Extract the extension number and increment
                     preg_match('/-EXT(\d+)$/', $lastExtension, $matches);
@@ -2586,11 +2581,11 @@ class Admin_Functions
                         $extensionCount = intval($matches[1]) + 1;
                     }
                 }
-                
+
                 $newReferenceNo = $originalRef . '-EXT' . str_pad($extensionCount, 3, '0', STR_PAD_LEFT);
                 $isNewBooking = true;
             }
-            
+
             if ($isNewBooking) {
                 // Create new booking record for the extended room
                 $createNewBooking = $conn->prepare("
@@ -2603,11 +2598,11 @@ class Admin_Functions
                      :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), 
                      :booking_totalAmount, 0, :reference_no)
                 ");
-                
+
                 // Set check-in time to 2:00 PM (14:00:00)
                 $checkinDateTime = new DateTime($originalBooking['booking_checkin_dateandtime']);
                 $checkinDateTime->setTime(14, 0, 0); // 2:00 PM
-                
+
                 $createNewBooking->execute([
                     ':customers_id' => $originalBooking['customers_id'],
                     ':customers_walk_in_id' => $originalBooking['customers_walk_in_id'],
@@ -2618,16 +2613,16 @@ class Admin_Functions
                     ':booking_totalAmount' => $additional_amount,
                     ':reference_no' => $newReferenceNo
                 ]);
-                
+
                 $newBookingId = $conn->lastInsertId();
-                
+
                 // Create booking room record for the new booking
                 $createBookingRoom = $conn->prepare("
                     INSERT INTO tbl_booking_room 
                     (booking_id, roomtype_id, roomnumber_id, bookingRoom_adult, bookingRoom_children)
                     VALUES (:booking_id, :roomtype_id, :roomnumber_id, :adult, :children)
                 ");
-                
+
                 $createBookingRoom->execute([
                     ':booking_id' => $newBookingId,
                     ':roomtype_id' => $roomTypeId,
@@ -2635,22 +2630,22 @@ class Admin_Functions
                     ':adult' => 1,
                     ':children' => 0
                 ]);
-                
+
                 // Create booking history for the new booking
                 $createHistory = $conn->prepare("
                     INSERT INTO tbl_booking_history 
                     (booking_id, employee_id, status_id, updated_at)
                     VALUES (:booking_id, :employee_id, 2, NOW())
                 ");
-                
+
                 $createHistory->execute([
                     ':booking_id' => $newBookingId,
                     ':employee_id' => $employee_id
                 ]);
-                
+
                 // Note: Original booking is NOT updated to keep it separate from room extensions
             }
-            
+
             // Update room status to Occupied for the extended period
             $updateRoomStatus = $conn->prepare("
                 UPDATE tbl_rooms 
@@ -2658,7 +2653,7 @@ class Admin_Functions
                 WHERE roomnumber_id = :room_id
             ");
             $updateRoomStatus->execute([':room_id' => $selected_room_id]);
-            
+
             // Create charges master entry for room extension if it doesn't exist
             $checkChargesMaster = $conn->prepare("
                 SELECT charges_master_id 
@@ -2669,7 +2664,7 @@ class Admin_Functions
             ");
             $checkChargesMaster->execute();
             $chargesMaster = $checkChargesMaster->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$chargesMaster) {
                 $createChargesMaster = $conn->prepare("
                     INSERT INTO tbl_charges_master 
@@ -2681,7 +2676,7 @@ class Admin_Functions
             } else {
                 $charges_master_id = $chargesMaster['charges_master_id'];
             }
-            
+
             // Get the booking room ID for the new booking
             $getNewBookingRoom = $conn->prepare("
                 SELECT booking_room_id FROM tbl_booking_room 
@@ -2692,7 +2687,7 @@ class Admin_Functions
                 ':room_id' => $selected_room_id
             ]);
             $newBookingRoomId = $getNewBookingRoom->fetchColumn();
-            
+
             // Insert booking charges for the extension
             $insertBookingCharges = $conn->prepare("
                 INSERT INTO tbl_booking_charges 
@@ -2706,9 +2701,9 @@ class Admin_Functions
                 ':additional_nights' => $additional_nights,
                 ':additional_amount' => $additional_amount
             ]);
-            
+
             $booking_charges_id = $conn->lastInsertId();
-            
+
             // If payment was made, create billing record
             if ($payment_amount > 0) {
                 $insertBilling = $conn->prepare("
@@ -2728,13 +2723,13 @@ class Admin_Functions
                     ':payment_amount' => $payment_amount
                 ]);
             }
-            
+
             $conn->commit();
-            
-            $message = $isNewBooking ? 
-                "Room extension booking created successfully" : 
+
+            $message = $isNewBooking ?
+                "Room extension booking created successfully" :
                 "Existing room extension updated successfully";
-                
+
             return json_encode([
                 "success" => true,
                 "message" => $message,
@@ -2748,13 +2743,465 @@ class Admin_Functions
                 "remaining_balance" => $additional_amount - $payment_amount,
                 "is_new_booking" => $isNewBooking
             ]);
-            
         } catch (Exception $e) {
             $conn->rollBack();
             return json_encode([
                 "success" => false,
                 "error" => $e->getMessage()
             ]);
+        }
+    }
+
+    // ------------------------------------------------------- Employee Management Functions ------------------------------------------------------- //
+
+    // View all employees
+    function view_AllEmployees()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT e.*, ul.userlevel_name 
+                    FROM tbl_employee e 
+                    LEFT JOIN tbl_user_level ul ON e.employee_user_level_id = ul.userlevel_id 
+                    ORDER BY e.employee_created_at DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return array(
+                "status" => "success",
+                "data" => $result
+            );
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error fetching employees: " . $e->getMessage()
+            );
+        }
+    }
+
+    // Add new employee
+    function add_NewEmployee($data)
+    {
+        include "connection.php";
+        try {
+            // Validate required fields
+            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_password', 'employee_address', 'employee_birthdate', 'employee_gender', 'employee_user_level_id'];
+            foreach ($required_fields as $field) {
+                if (empty($data[$field])) {
+                    throw new Exception("Field '$field' is required");
+                }
+            }
+
+            // Check if username or email already exists
+            $check_sql = "SELECT COUNT(*) FROM tbl_employee WHERE employee_username = :username OR employee_email = :email";
+            $check_stmt = $conn->prepare($check_sql);
+            $check_stmt->bindParam(':username', $data['employee_username']);
+            $check_stmt->bindParam(':email', $data['employee_email']);
+            $check_stmt->execute();
+
+            if ($check_stmt->fetchColumn() > 0) {
+                throw new Exception("Username or email already exists");
+            }
+
+            // Hash password
+            $hashed_password = password_hash($data['employee_password'], PASSWORD_DEFAULT);
+
+            $sql = "INSERT INTO tbl_employee (employee_user_level_id, employee_fname, employee_lname, employee_username, employee_phone, employee_email, employee_password, employee_address, employee_birthdate, employee_gender, employee_created_at, employee_updated_at, employee_status) 
+                    VALUES (:user_level_id, :fname, :lname, :username, :phone, :email, :password, :address, :birthdate, :gender, NOW(), NOW(), 'Active')";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':user_level_id', $data['employee_user_level_id']);
+            $stmt->bindParam(':fname', $data['employee_fname']);
+            $stmt->bindParam(':lname', $data['employee_lname']);
+            $stmt->bindParam(':username', $data['employee_username']);
+            $stmt->bindParam(':phone', $data['employee_phone']);
+            $stmt->bindParam(':email', $data['employee_email']);
+            $stmt->bindParam(':password', $hashed_password);
+            $stmt->bindParam(':address', $data['employee_address']);
+            $stmt->bindParam(':birthdate', $data['employee_birthdate']);
+            $stmt->bindParam(':gender', $data['employee_gender']);
+
+            if ($stmt->execute()) {
+                return array(
+                    "status" => "success",
+                    "message" => "Employee added successfully",
+                    "employee_id" => $conn->lastInsertId()
+                );
+            } else {
+                throw new Exception("Failed to add employee");
+            }
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error adding employee: " . $e->getMessage()
+            );
+        }
+    }
+
+    // Update employee
+    function update_CurrEmployee($data)
+    {
+        include "connection.php";
+        try {
+            // Validate required fields
+            if (empty($data['employee_id'])) {
+                throw new Exception("Employee ID is required");
+            }
+
+            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_address', 'employee_birthdate', 'employee_gender', 'employee_user_level_id'];
+            foreach ($required_fields as $field) {
+                if (empty($data[$field])) {
+                    throw new Exception("Field '$field' is required");
+                }
+            }
+
+            // Check if username or email already exists (excluding current employee)
+            $check_sql = "SELECT COUNT(*) FROM tbl_employee WHERE (employee_username = :username OR employee_email = :email) AND employee_id != :employee_id";
+            $check_stmt = $conn->prepare($check_sql);
+            $check_stmt->bindParam(':username', $data['employee_username']);
+            $check_stmt->bindParam(':email', $data['employee_email']);
+            $check_stmt->bindParam(':employee_id', $data['employee_id']);
+            $check_stmt->execute();
+
+            if ($check_stmt->fetchColumn() > 0) {
+                throw new Exception("Username or email already exists");
+            }
+
+            // Build update query
+            $sql = "UPDATE tbl_employee SET 
+                    employee_user_level_id = :user_level_id,
+                    employee_fname = :fname,
+                    employee_lname = :lname,
+                    employee_username = :username,
+                    employee_phone = :phone,
+                    employee_email = :email,
+                    employee_address = :address,
+                    employee_birthdate = :birthdate,
+                    employee_gender = :gender,
+                    employee_updated_at = NOW()";
+
+            // Add password update if provided
+            if (!empty($data['employee_password'])) {
+                $hashed_password = password_hash($data['employee_password'], PASSWORD_DEFAULT);
+                $sql .= ", employee_password = :password";
+            }
+
+            $sql .= " WHERE employee_id = :employee_id";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':user_level_id', $data['employee_user_level_id']);
+            $stmt->bindParam(':fname', $data['employee_fname']);
+            $stmt->bindParam(':lname', $data['employee_lname']);
+            $stmt->bindParam(':username', $data['employee_username']);
+            $stmt->bindParam(':phone', $data['employee_phone']);
+            $stmt->bindParam(':email', $data['employee_email']);
+            $stmt->bindParam(':address', $data['employee_address']);
+            $stmt->bindParam(':birthdate', $data['employee_birthdate']);
+            $stmt->bindParam(':gender', $data['employee_gender']);
+            $stmt->bindParam(':employee_id', $data['employee_id']);
+
+            if (!empty($data['employee_password'])) {
+                $stmt->bindParam(':password', $hashed_password);
+            }
+
+            if ($stmt->execute()) {
+                return array(
+                    "status" => "success",
+                    "message" => "Employee updated successfully"
+                );
+            } else {
+                throw new Exception("Failed to update employee");
+            }
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error updating employee: " . $e->getMessage()
+            );
+        }
+    }
+
+    // Remove/Deactivate employee
+    function remove_Employee($data)
+    {
+        include "connection.php";
+        try {
+            if (empty($data['employee_id'])) {
+                throw new Exception("Employee ID is required");
+            }
+
+            // Instead of deleting, we'll deactivate the employee
+            $sql = "UPDATE tbl_employee SET employee_status = 'Inactive', employee_updated_at = NOW() WHERE employee_id = :employee_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':employee_id', $data['employee_id']);
+
+            if ($stmt->execute()) {
+                return array(
+                    "status" => "success",
+                    "message" => "Employee deactivated successfully"
+                );
+            } else {
+                throw new Exception("Failed to deactivate employee");
+            }
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error deactivating employee: " . $e->getMessage()
+            );
+        }
+    }
+
+    // Get user levels
+    function getUserLevels()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT * FROM tbl_user_level ORDER BY userlevel_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return array(
+                "status" => "success",
+                "data" => $result
+            );
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error fetching user levels: " . $e->getMessage()
+            );
+        }
+    }
+
+    function getAdminProfile($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+        
+        try {
+            $employeeId = $data["employee_id"];
+            
+            $sql = "SELECT e.*, ul.userlevel_name 
+                    FROM tbl_employee e 
+                    LEFT JOIN tbl_user_level ul ON e.employee_user_level_id = ul.userlevel_id 
+                    WHERE e.employee_id = :employee_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":employee_id", $employeeId);
+            $stmt->execute();
+            
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result) {
+                return [
+                    "status" => "success",
+                    "data" => $result
+                ];
+            } else {
+                return [
+                    "status" => "error",
+                    "message" => "Admin profile not found"
+                ];
+            }
+        } catch (Exception $e) {
+            return [
+                "status" => "error",
+                "message" => "Error fetching admin profile: " . $e->getMessage()
+            ];
+        }
+    }
+
+    function updateAdminProfile($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+        
+        try {
+            $employeeId = $data["employee_id"];
+            
+            // First, get current employee data to verify current password if changing password
+            $getCurrentSql = "SELECT employee_password FROM tbl_employee WHERE employee_id = :employee_id";
+            $getCurrentStmt = $conn->prepare($getCurrentSql);
+            $getCurrentStmt->bindParam(":employee_id", $employeeId);
+            $getCurrentStmt->execute();
+            $currentEmployee = $getCurrentStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$currentEmployee) {
+                return [
+                    "status" => "error",
+                    "message" => "Employee not found"
+                ];
+            }
+            
+            // Check if password is being changed
+            if (isset($data["new_password"]) && !empty($data["new_password"])) {
+                $currentPassword = $data["current_password"];
+                $storedPassword = $currentEmployee["employee_password"];
+                
+                // Verify current password
+                if (password_get_info($storedPassword)['algo'] !== null) {
+                    // Password is hashed, use password_verify
+                    if (!password_verify($currentPassword, $storedPassword)) {
+                        return [
+                            "status" => "error",
+                            "message" => "Current password is incorrect"
+                        ];
+                    }
+                } else {
+                    // Password is plain text (legacy), compare directly
+                    if ($currentPassword !== $storedPassword) {
+                        return [
+                            "status" => "error",
+                            "message" => "Current password is incorrect"
+                        ];
+                    }
+                }
+            }
+            
+            // Check for duplicate username and email (excluding current employee)
+            if (isset($data["employee_username"])) {
+                $checkUsernameSql = "SELECT employee_id FROM tbl_employee WHERE employee_username = :username AND employee_id != :employee_id";
+                $checkUsernameStmt = $conn->prepare($checkUsernameSql);
+                $checkUsernameStmt->bindParam(":username", $data["employee_username"]);
+                $checkUsernameStmt->bindParam(":employee_id", $employeeId);
+                $checkUsernameStmt->execute();
+                
+                if ($checkUsernameStmt->fetch()) {
+                    return [
+                        "status" => "error",
+                        "message" => "Username already exists"
+                    ];
+                }
+            }
+            
+            if (isset($data["employee_email"])) {
+                $checkEmailSql = "SELECT employee_id FROM tbl_employee WHERE employee_email = :email AND employee_id != :employee_id";
+                $checkEmailStmt = $conn->prepare($checkEmailSql);
+                $checkEmailStmt->bindParam(":email", $data["employee_email"]);
+                $checkEmailStmt->bindParam(":employee_id", $employeeId);
+                $checkEmailStmt->execute();
+                
+                if ($checkEmailStmt->fetch()) {
+                    return [
+                        "status" => "error",
+                        "message" => "Email already exists"
+                    ];
+                }
+            }
+            
+            // Build update query dynamically
+            $updateFields = [];
+            $params = [":employee_id" => $employeeId];
+            
+            if (isset($data["employee_fname"])) {
+                $updateFields[] = "employee_fname = :employee_fname";
+                $params[":employee_fname"] = $data["employee_fname"];
+            }
+            
+            if (isset($data["employee_lname"])) {
+                $updateFields[] = "employee_lname = :employee_lname";
+                $params[":employee_lname"] = $data["employee_lname"];
+            }
+            
+            if (isset($data["employee_username"])) {
+                $updateFields[] = "employee_username = :employee_username";
+                $params[":employee_username"] = $data["employee_username"];
+            }
+            
+            if (isset($data["employee_email"])) {
+                $updateFields[] = "employee_email = :employee_email";
+                $params[":employee_email"] = $data["employee_email"];
+            }
+            
+            if (isset($data["employee_phone"])) {
+                $updateFields[] = "employee_phone = :employee_phone";
+                $params[":employee_phone"] = $data["employee_phone"];
+            }
+            
+            if (isset($data["employee_address"])) {
+                $updateFields[] = "employee_address = :employee_address";
+                $params[":employee_address"] = $data["employee_address"];
+            }
+            
+            if (isset($data["employee_birthdate"])) {
+                $updateFields[] = "employee_birthdate = :employee_birthdate";
+                $params[":employee_birthdate"] = $data["employee_birthdate"];
+            }
+            
+            if (isset($data["employee_gender"])) {
+                $updateFields[] = "employee_gender = :employee_gender";
+                $params[":employee_gender"] = $data["employee_gender"];
+            }
+            
+            // Handle password update
+            if (isset($data["new_password"]) && !empty($data["new_password"])) {
+                $hashedPassword = password_hash($data["new_password"], PASSWORD_DEFAULT);
+                $updateFields[] = "employee_password = :employee_password";
+                $params[":employee_password"] = $hashedPassword;
+            }
+            
+            // Always update the timestamp
+            $updateFields[] = "employee_updated_at = NOW()";
+            
+            if (empty($updateFields)) {
+                return [
+                    "status" => "error",
+                    "message" => "No fields to update"
+                ];
+            }
+            
+            $updateSql = "UPDATE tbl_employee SET " . implode(", ", $updateFields) . " WHERE employee_id = :employee_id";
+            $updateStmt = $conn->prepare($updateSql);
+            
+            foreach ($params as $key => $value) {
+                $updateStmt->bindValue($key, $value);
+            }
+            
+            $updateStmt->execute();
+            
+            return [
+                "status" => "success",
+                "message" => "Profile updated successfully"
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                "status" => "error",
+                "message" => "Error updating profile: " . $e->getMessage()
+            ];
+        }
+    }
+
+    function logout($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+
+        try {
+            // Check if user is an employee/admin
+            if (isset($data["user_type"]) && ($data["user_type"] === "admin" || $data["user_type"] === "employee")) {
+                $employeeId = $data["employee_id"];
+
+                // Update employee status to 'Offline' when logging out
+                $updateSql = "UPDATE tbl_employee SET employee_status = 'Offline', employee_updated_at = NOW() WHERE employee_id = :employee_id";
+                $updateStmt = $conn->prepare($updateSql);
+                $updateStmt->bindParam(":employee_id", $employeeId);
+                $updateStmt->execute();
+
+                return [
+                    "success" => true,
+                    "message" => "Successfully logged out"
+                ];
+            } else {
+                // For customers, just return success (no status update needed)
+                return [
+                    "success" => true,
+                    "message" => "Successfully logged out"
+                ];
+            }
+        } catch (Exception $e) {
+            return [
+                "success" => false,
+                "message" => "Error during logout: " . $e->getMessage()
+            ];
         }
     }
 }
@@ -2984,12 +3431,12 @@ switch ($methodType) {
     case "get_amenity_request_stats":
         echo json_encode($AdminClass->getAmenityRequestStats());
         break;
-    
+
     // -------- Add Amenity Request -------- //
     case "get_available_charges":
         echo json_encode($AdminClass->getAvailableCharges());
         break;
-    
+
     case "get_active_bookings":
         echo json_encode($AdminClass->getActiveBookings());
         break;
@@ -2997,24 +3444,58 @@ switch ($methodType) {
     case "get_booking_rooms":
         echo json_encode($AdminClass->getBookingRooms());
         break;
-    
+
     case "add_amenity_request":
         echo $AdminClass->addAmenityRequest($jsonData);
         break;
-    
+
     // -------- Notification Functions -------- //
     case "get_pending_amenity_count":
         echo json_encode($AdminClass->getPendingAmenityCount());
         break;
-    
+
     // -------- Booking Extension with Payment -------- //
-        case "extendBookingWithPayment":
-            echo $AdminClass->extendBookingWithPayment($jsonData);
-            break;
-        case "extendMultiRoomBookingWithPayment":
-            echo $AdminClass->extendMultiRoomBookingWithPayment($jsonData);
-            break;
+    case "extendBookingWithPayment":
+        echo $AdminClass->extendBookingWithPayment($jsonData);
+        break;
+    case "extendMultiRoomBookingWithPayment":
+        echo $AdminClass->extendMultiRoomBookingWithPayment($jsonData);
+        break;
+
+    // -------- Employee Management -------- //
+    case "viewEmployees":
+        echo json_encode($AdminClass->view_AllEmployees());
+        break;
+
+    case "addEmployee":
+        echo json_encode($AdminClass->add_NewEmployee($jsonData));
+        break;
+
+    case "updateEmployee":
+        echo json_encode($AdminClass->update_CurrEmployee($jsonData));
+        break;
+
+    case "deleteEmployee":
+        echo json_encode($AdminClass->remove_Employee($jsonData));
+        break;
+
+    case "getUserLevels":
+        echo json_encode($AdminClass->getUserLevels());
+        break;
+
+    case "logout":
+        echo json_encode($AdminClass->logout(json_encode($jsonData)));
+        break;
+
+    case "getAdminProfile":
+        echo json_encode($AdminClass->getAdminProfile(json_encode($jsonData)));
+        break;
+
+    case "updateAdminProfile":
+        echo json_encode($AdminClass->updateAdminProfile(json_encode($jsonData)));
+        break;
 }
+
 
 
 // Needs fixing/update
