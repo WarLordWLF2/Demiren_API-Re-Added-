@@ -81,6 +81,7 @@ class Admin_Functions
             // First, get all rooms with their basic information
             $sql = "SELECT 
                         r.roomnumber_id,
+                        r.room_status_id, 
                         r.roomfloor,
                         rt.roomtype_capacity,
                         rt.roomtype_beds,
@@ -345,6 +346,52 @@ class Admin_Functions
                 "success" => false,
                 "error" => $e->getMessage()
             ]);
+        }
+    }
+
+    // Toggle room status between Vacant (3) and Under-Maintenance (4)
+    function toggleRoomStatus($data)
+    {
+        include "connection.php";
+
+        try {
+            $room_id = intval($data["room_id"]);
+
+            // Get current status
+            $stmt = $conn->prepare("SELECT room_status_id FROM tbl_rooms WHERE roomnumber_id = :room_id");
+            $stmt->bindParam(":room_id", $room_id);
+            $stmt->execute();
+            $room = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$room) {
+                return json_encode(["success" => false, "message" => "Room not found"]);
+            }
+
+            // Determine new status: toggle between 3 (Vacant) and 4 (Under-Maintenance)
+            $new_status_id = ($room["room_status_id"] == 3) ? 4 : 3;
+
+            // Update room status
+            $update_stmt = $conn->prepare("UPDATE tbl_rooms SET room_status_id = :new_status_id WHERE roomnumber_id = :room_id");
+            $update_stmt->bindParam(":new_status_id", $new_status_id);
+            $update_stmt->bindParam(":room_id", $room_id);
+            $update_stmt->execute();
+
+            // Get status name for response
+            $status_stmt = $conn->prepare("SELECT status_name FROM tbl_status_types WHERE status_id = :status_id");
+            $status_stmt->bindParam(":status_id", $new_status_id);
+            $status_stmt->execute();
+            $status = $status_stmt->fetch(PDO::FETCH_ASSOC);
+
+            unset($conn, $stmt, $update_stmt, $status_stmt);
+
+            return json_encode([
+                "success" => true,
+                "message" => "Room status updated successfully",
+                "new_status_id" => $new_status_id,
+                "new_status_name" => $status["status_name"]
+            ]);
+        } catch (PDOException $e) {
+            return json_encode(["success" => false, "message" => $e->getMessage()]);
         }
     }
 
@@ -657,7 +704,7 @@ class Admin_Functions
 
             $conn->commit();
             return json_encode([
-                'status' => 'success', 
+                'status' => 'success',
                 'message' => 'Walk-in booking inserted successfully.',
                 'booking_id' => $bookingId,
                 'reference_no' => $reference_no,
@@ -832,7 +879,7 @@ class Admin_Functions
                     ':booking_id' => $bookingId,
                     ':room_id'    => $newRoomId
                 ]);
-                
+
                 if ($stmtCheckExisting->fetchColumn() > 0) {
                     // Room already assigned, just update its status
                     $stmtUpdateRoom->execute([
@@ -861,7 +908,7 @@ class Admin_Functions
                     $old_room_id = $roomToReplace['roomnumber_id'];
                     $freeOldRoomStmt = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 3 WHERE roomnumber_id = ?");
                     $freeOldRoomStmt->execute([$old_room_id]);
-                    
+
                     // Assign the new room in place of existing one
                     $assignNewRoomStmt = $conn->prepare("
                         UPDATE tbl_booking_room 
@@ -1451,6 +1498,135 @@ class Admin_Functions
         }
     }
 
+    function getDetailedBookingSalesByMonth()
+    {
+        include "connection.php";
+
+        $month = $_POST['month'] ?? '';
+        $year = $_POST['year'] ?? date('Y');
+
+        // Convert month name to number
+        $monthMap = [
+            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
+            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
+            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12
+        ];
+
+        $monthNumber = $monthMap[$month] ?? 0;
+        if ($monthNumber === 0) {
+            return json_encode(["error" => "Invalid month"]);
+        }
+
+        // Query using booking_id from tbl_billing to validate the relationship chain
+        // Also include walk-in customers
+        $sql = "SELECT 
+                    b.booking_id,
+                    b.reference_no,
+                    i.invoice_date,
+                    rt.roomtype_name,
+                    rt.roomtype_price,
+                    COALESCE(c.customers_fname, cw.customers_walk_in_fname) as customer_fname,
+                    COALESCE(c.customers_lname, cw.customers_walk_in_lname) as customer_lname,
+                    bl.billing_total_amount,
+                    i.invoice_total_amount
+                FROM tbl_billing bl
+                INNER JOIN tbl_booking b ON bl.booking_id = b.booking_id
+                INNER JOIN tbl_invoice i ON bl.billing_id = i.billing_id
+                INNER JOIN tbl_booking_room br ON bl.booking_id = br.booking_id
+                INNER JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
+                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_customers_walk_in cw ON b.customers_walk_in_id = cw.customers_walk_in_id
+                WHERE i.invoice_status_id = 1 
+                AND MONTH(i.invoice_date) = ? 
+                AND YEAR(i.invoice_date) = ?
+                ORDER BY i.invoice_date DESC";
+
+        try {
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(1, $monthNumber, PDO::PARAM_INT);
+            $stmt->bindParam(2, $year, PDO::PARAM_INT);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return count($result) > 0 ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
+    // Get Active Bookings (bookings without invoices = not checked out)
+    function getActiveBookingsForDashboard()
+    {
+        include "connection.php";
+
+        try {
+            // Count only active bookings that don't have invoices (not checked out)
+            $sql = "SELECT 
+                        COUNT(DISTINCT b.booking_id) as active_bookings_count
+                    FROM tbl_booking b
+                    LEFT JOIN tbl_billing bl ON b.booking_id = bl.booking_id
+                    LEFT JOIN tbl_invoice i ON bl.billing_id = i.billing_id
+                    WHERE b.booking_isArchive = 0
+                    AND b.booking_checkin_dateandtime <= NOW()  
+                    AND b.booking_checkout_dateandtime >= NOW()
+                    AND i.invoice_id IS NULL";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Ensure we return a number, not null
+            $activeBookingsCount = $result['active_bookings_count'] ?? 0;
+
+            return json_encode([
+                'active_bookings_count' => (int)$activeBookingsCount
+            ]);
+        } catch (PDOException $e) {
+            return json_encode([
+                'error' => $e->getMessage(),
+                'active_bookings_count' => 0
+            ]);
+        }
+    }
+
+    // Get Available Rooms Count
+    function getAvailableRoomsCount()
+    {
+        include "connection.php";
+
+        try {
+            $sql = "SELECT 
+                        COUNT(r.roomnumber_id) as total_available_rooms,
+                        COUNT(CASE WHEN rt.roomtype_id = 1 THEN 1 END) as standard_twin_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 2 THEN 1 END) as single_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 3 THEN 1 END) as double_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 4 THEN 1 END) as triple_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 5 THEN 1 END) as quadruple_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 6 THEN 1 END) as family_a_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 7 THEN 1 END) as family_b_available,
+                        COUNT(CASE WHEN rt.roomtype_id = 8 THEN 1 END) as family_c_available
+                    FROM tbl_rooms r
+                    INNER JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
+                    WHERE r.room_status_id = 3
+                    AND r.roomnumber_id NOT IN (
+                        SELECT DISTINCT br.roomnumber_id
+                        FROM tbl_booking_room br
+                        INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
+                        WHERE b.booking_isArchive = 0
+                        AND b.booking_checkin_dateandtime <= NOW()
+                        AND b.booking_checkout_dateandtime >= NOW()
+                    )";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return json_encode($result);
+        } catch (PDOException $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
     function getAllCustomersRooms($data)
     {
         include 'connection.php';
@@ -1886,7 +2062,12 @@ class Admin_Functions
     {
         include "connection.php";
 
-        $sql = "SELECT * FROM tbl_roomtype";
+        $sql = "SELECT a.*, 
+                GROUP_CONCAT(b.imagesroommaster_filename ORDER BY b.imagesroommaster_filename ASC) AS images
+                FROM tbl_roomtype AS a
+                INNER JOIN tbl_imagesroommaster AS b 
+                    ON b.roomtype_id = a.roomtype_id
+                GROUP BY a.roomtype_id";
 
         $stmt = $conn->prepare($sql);
         $stmt->execute();
@@ -1967,7 +2148,7 @@ class Admin_Functions
     function getAmenityRequests()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     bc.booking_charges_id as request_id,
                     b.booking_id,
@@ -2007,7 +2188,7 @@ class Admin_Functions
                 LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
                 WHERE b.booking_isArchive = 0
                 ORDER BY bc.booking_charges_id DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2017,11 +2198,11 @@ class Admin_Functions
     {
         include "connection.php";
         // $data is already an array from the switch statement
-        
+
         $request_id = $data['request_id'];
         $employee_id = $data['employee_id'] ?? 1; // Default to admin
         $admin_notes = $data['admin_notes'] ?? '';
-        
+
         try {
             // Update the booking_charge_status to approved (2)
             $updateRequest = $conn->prepare("
@@ -2031,9 +2212,8 @@ class Admin_Functions
             ");
             $updateRequest->bindParam(':request_id', $request_id);
             $updateRequest->execute();
-            
+
             return $updateRequest->rowCount() > 0 ? 1 : 0;
-            
         } catch (Exception $e) {
             return 0;
         }
@@ -2043,11 +2223,11 @@ class Admin_Functions
     {
         include "connection.php";
         // $data is already an array from the switch statement
-        
+
         $request_id = $data['request_id'];
         $employee_id = $data['employee_id'] ?? 1; // Default to admin
         $admin_notes = $data['admin_notes'] ?? '';
-        
+
         try {
             // Update the booking_charge_status to rejected/cancelled (3)
             $stmt = $conn->prepare("
@@ -2057,9 +2237,8 @@ class Admin_Functions
             ");
             $stmt->bindParam(':request_id', $request_id);
             $stmt->execute();
-            
+
             return $stmt->rowCount() > 0 ? 1 : 0;
-            
         } catch (Exception $e) {
             return 0;
         }
@@ -2068,7 +2247,7 @@ class Admin_Functions
     function getAmenityRequestStats()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     COUNT(*) as total_requests,
                     SUM(CASE WHEN bc.booking_charge_status = 1 THEN 1 ELSE 0 END) as pending_requests,
@@ -2084,7 +2263,7 @@ class Admin_Functions
                 INNER JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
                 INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
                 WHERE b.booking_isArchive = 0";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetch(PDO::FETCH_ASSOC);
@@ -2094,7 +2273,7 @@ class Admin_Functions
     function getAvailableCharges()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     cm.charges_master_id,
                     cm.charges_master_name,
@@ -2105,7 +2284,7 @@ class Admin_Functions
                 LEFT JOIN tbl_charges_category cc ON cm.charges_category_id = cc.charges_category_id
                 WHERE cm.charges_master_status_id = 1
                 ORDER BY cc.charges_category_name, cm.charges_master_name";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2114,7 +2293,7 @@ class Admin_Functions
     function getActiveBookings()
     {
         include "connection.php";
-        
+
         $sql = "SELECT DISTINCT
                     b.booking_id,
                     b.reference_no,
@@ -2146,7 +2325,7 @@ class Admin_Functions
                 ) IN (2, 5) -- Approved or Checked-In status
                 GROUP BY b.booking_id
                 ORDER BY b.booking_checkin_dateandtime DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2155,7 +2334,7 @@ class Admin_Functions
     function getBookingRooms()
     {
         include "connection.php";
-        
+
         $sql = "SELECT 
                     br.booking_room_id,
                     br.booking_id,
@@ -2196,7 +2375,7 @@ class Admin_Functions
                     LIMIT 1
                 ) IN (2, 5) -- Approved or Checked-In status
                 ORDER BY b.booking_checkin_dateandtime DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2205,7 +2384,7 @@ class Admin_Functions
     function addAmenityRequest($data)
     {
         include "connection.php";
-        
+
         try {
             // Accept either booking_room_id (new) or booking_id (legacy)
             if (isset($data['booking_room_id'])) {
@@ -2218,34 +2397,34 @@ class Admin_Functions
                 $booking_room_stmt->bindParam(':booking_id', $booking_id);
                 $booking_room_stmt->execute();
                 $booking_room = $booking_room_stmt->fetch(PDO::FETCH_ASSOC);
-                
+
                 if (!$booking_room) {
                     return json_encode(["success" => false, "message" => "No booking room found for this booking"]);
                 }
-                
+
                 $booking_room_id = $booking_room['booking_room_id'];
             }
-            
+
             $amenities = $data['amenities']; // Array of amenities
             $booking_charge_status = $data['booking_charge_status'] ?? 1; // Default to Pending
-            
+
             // Debug logging
             error_log("addAmenityRequest called with data: " . json_encode($data));
             error_log("Using booking_room_id: " . $booking_room_id);
             error_log("Number of amenities: " . count($amenities));
-            
+
             // Start transaction for bulk insert
             $conn->beginTransaction();
-            
+
             $inserted_count = 0;
             foreach ($amenities as $amenity) {
                 $charges_master_id = $amenity['charges_master_id'];
                 $booking_charges_price = $amenity['booking_charges_price'];
                 $booking_charges_quantity = $amenity['booking_charges_quantity'];
-                
+
                 // Calculate total for this amenity
                 $booking_charges_total = $booking_charges_price * $booking_charges_quantity;
-                
+
                 // Insert into tbl_booking_charges
                 $sql = "INSERT INTO tbl_booking_charges (
                             booking_room_id,
@@ -2262,7 +2441,7 @@ class Admin_Functions
                             :booking_charges_total,
                             :booking_charge_status
                         )";
-                
+
                 $stmt = $conn->prepare($sql);
                 $stmt->bindParam(':booking_room_id', $booking_room_id);
                 $stmt->bindParam(':charges_master_id', $charges_master_id);
@@ -2270,20 +2449,19 @@ class Admin_Functions
                 $stmt->bindParam(':booking_charges_quantity', $booking_charges_quantity);
                 $stmt->bindParam(':booking_charges_total', $booking_charges_total);
                 $stmt->bindParam(':booking_charge_status', $booking_charge_status);
-                
+
                 if ($stmt->execute()) {
                     $inserted_count++;
                 }
             }
-            
+
             // Commit transaction
             $conn->commit();
-            
+
             return json_encode([
-                "success" => true, 
+                "success" => true,
                 "message" => "Successfully added {$inserted_count} amenity request(s)"
             ]);
-            
         } catch (Exception $e) {
             // Rollback transaction on error
             $conn->rollback();
@@ -2297,23 +2475,22 @@ class Admin_Functions
     function getPendingAmenityCount()
     {
         include "connection.php";
-        
+
         try {
             // Count pending amenity requests from tbl_booking_charges
             // Status 1 = Pending, 2 = Delivered, 3 = Cancelled
             $sql = "SELECT COUNT(*) as pending_count 
                     FROM tbl_booking_charges 
                     WHERE booking_charge_status = 1";
-            
+
             $stmt = $conn->prepare($sql);
             $stmt->execute();
             $result = $stmt->fetch(PDO::FETCH_ASSOC);
-            
+
             return [
                 "success" => true,
                 "pending_count" => (int)$result['pending_count']
             ];
-            
         } catch (Exception $e) {
             return [
                 "success" => false,
@@ -2327,10 +2504,10 @@ class Admin_Functions
     function extendBookingWithPayment($data)
     {
         include "connection.php";
-        
+
         try {
             $conn->beginTransaction();
-            
+
             $booking_id = intval($data["booking_id"]);
             $employee_id = intval($data["employee_id"]);
             $new_checkout_date = $data["new_checkout_date"];
@@ -2339,16 +2516,16 @@ class Admin_Functions
             $payment_amount = floatval($data["payment_amount"]);
             $payment_method_id = intval($data["payment_method_id"]);
             $room_price = floatval($data["room_price"]);
-            
+
             // Check if booking exists
             $checkBooking = $conn->prepare("SELECT booking_id, booking_checkout_dateandtime FROM tbl_booking WHERE booking_id = :booking_id");
             $checkBooking->execute([':booking_id' => $booking_id]);
             $existingBooking = $checkBooking->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$existingBooking) {
                 throw new Exception("Booking with ID $booking_id not found");
             }
-            
+
             // 1. Update booking checkout date and amounts
             $updateBooking = $conn->prepare("
                 UPDATE tbl_booking 
@@ -2364,8 +2541,8 @@ class Admin_Functions
                 ':payment_amount' => $payment_amount,
                 ':booking_id' => $booking_id
             ]);
-            
-            
+
+
             // 2. Get booking room information
             $getBookingRoom = $conn->prepare("
                 SELECT booking_room_id, roomtype_id 
@@ -2375,11 +2552,11 @@ class Admin_Functions
             ");
             $getBookingRoom->execute([':booking_id' => $booking_id]);
             $bookingRoom = $getBookingRoom->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$bookingRoom) {
                 throw new Exception("No booking room found for this booking");
             }
-            
+
             // 3. Create a charges master entry for room extension if it doesn't exist
             $checkChargesMaster = $conn->prepare("
                 SELECT charges_master_id 
@@ -2390,7 +2567,7 @@ class Admin_Functions
             ");
             $checkChargesMaster->execute();
             $chargesMaster = $checkChargesMaster->fetch(PDO::FETCH_ASSOC);
-            
+
             if (!$chargesMaster) {
                 // Create room extension charge
                 $createChargesMaster = $conn->prepare("
@@ -2403,7 +2580,7 @@ class Admin_Functions
             } else {
                 $charges_master_id = $chargesMaster['charges_master_id'];
             }
-            
+
             // 4. Insert booking charges for the extension
             $insertBookingCharges = $conn->prepare("
                 INSERT INTO tbl_booking_charges 
@@ -2417,9 +2594,9 @@ class Admin_Functions
                 ':additional_nights' => $additional_nights,
                 ':additional_amount' => $additional_amount
             ]);
-            
+
             $booking_charges_id = $conn->lastInsertId();
-            
+
             // 5. If payment was made, create billing record
             if ($payment_amount > 0) {
                 $insertBilling = $conn->prepare("
@@ -2439,7 +2616,7 @@ class Admin_Functions
                     ':payment_amount' => $payment_amount
                 ]);
             }
-            
+
             // 6. Insert booking history for extension
             $insertHistory = $conn->prepare("
                 INSERT INTO tbl_booking_history 
@@ -2450,9 +2627,9 @@ class Admin_Functions
                 ':booking_id' => $booking_id,
                 ':employee_id' => $employee_id
             ]);
-            
+
             $conn->commit();
-            
+
             return json_encode([
                 "success" => true,
                 "message" => "Booking extended successfully",
@@ -2461,7 +2638,6 @@ class Admin_Functions
                 "payment_amount" => $payment_amount,
                 "remaining_balance" => $additional_amount - $payment_amount
             ]);
-            
         } catch (Exception $e) {
             $conn->rollBack();
             return json_encode([
@@ -2470,20 +2646,75 @@ class Admin_Functions
             ]);
         }
     }
-}
 
+    // Get All Bookings for Calendar
+    function getAllBookings()
+    {
+        include "connection.php";
+        
+        try {
+            $sql = "SELECT 
+                        b.booking_id,
+                        DATE_FORMAT(b.booking_checkin_dateandtime, '%Y-%m-%d') as checkin_date,
+                        DATE_FORMAT(b.booking_checkout_dateandtime, '%Y-%m-%d') as checkout_date,
+                        br.roomnumber_id,
+                        rt.roomtype_id,
+                        rt.roomtype_name
+                    FROM tbl_booking b
+                    INNER JOIN tbl_booking_room br ON b.booking_id = br.booking_id
+                    INNER JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                    INNER JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
+                    WHERE b.booking_isArchive = 0
+                    ORDER BY b.booking_checkin_dateandtime ASC";
+            
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+            return json_encode($bookings);
+            
+        } catch (PDOException $e) {
+            return json_encode(['error' => $e->getMessage()]);
+        }
+    }
+}
 
 $AdminClass = new Admin_Functions();
 
 $methodType = isset($_POST["method"]) ? $_POST["method"] : 0;
 $jsonData = isset($_POST["json"]) ? json_decode($_POST["json"], true) : 0;
 
+// If no method provided, return error
+if (empty($methodType)) {
+    echo json_encode([
+        'success' => false,
+        'error' => 'No method provided',
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+    exit();
+}
 
 switch ($methodType) {
 
     // --------------------------------- For Dashboard --------------------------------- //
     case "getInvoiceDatas":
         echo $AdminClass->getInvoicesData();
+        break;
+
+    case "getDetailedBookingSalesByMonth":
+        echo $AdminClass->getDetailedBookingSalesByMonth();
+        break;
+
+    case "getActiveBookingsForDashboard":
+        echo $AdminClass->getActiveBookingsForDashboard();
+        break;
+
+    case "getAvailableRoomsCount":
+        echo $AdminClass->getAvailableRoomsCount();
+        break;
+
+    case "getAllBookings":
+        echo $AdminClass->getAllBookings();
         break;
 
     // --------------------------------- Approving Customer Bookings --------------------------------- //
@@ -2551,6 +2782,13 @@ switch ($methodType) {
     // --------------------------------- For Viewing Data or Login --------------------------------- //
     case "login":
         echo $AdminClass->admin_login($jsonData);
+        break;
+
+    // Room status toggle between Vacant and Under-Maintenance
+    case "toggleRoomStatus":
+        $data = array();
+        $data["room_id"] = isset($_POST["room_id"]) ? $_POST["room_id"] : 0;
+        echo $AdminClass->toggleRoomStatus($data);
         break;
 
     case "viewCustomers":
@@ -2697,12 +2935,12 @@ switch ($methodType) {
     case "get_amenity_request_stats":
         echo json_encode($AdminClass->getAmenityRequestStats());
         break;
-    
+
     // -------- Add Amenity Request -------- //
     case "get_available_charges":
         echo json_encode($AdminClass->getAvailableCharges());
         break;
-    
+
     case "get_active_bookings":
         echo json_encode($AdminClass->getActiveBookings());
         break;
@@ -2710,19 +2948,27 @@ switch ($methodType) {
     case "get_booking_rooms":
         echo json_encode($AdminClass->getBookingRooms());
         break;
-    
+
     case "add_amenity_request":
         echo $AdminClass->addAmenityRequest($jsonData);
         break;
-    
+
     // -------- Notification Functions -------- //
     case "get_pending_amenity_count":
         echo json_encode($AdminClass->getPendingAmenityCount());
         break;
-    
+
     // -------- Booking Extension with Payment -------- //
     case "extendBookingWithPayment":
         echo $AdminClass->extendBookingWithPayment($jsonData);
+        break;
+
+    default:
+        echo json_encode([
+            'success' => false,
+            'error' => 'Method not found: ' . $methodType,
+            'timestamp' => date('Y-m-d H:i:s')
+        ]);
         break;
 }
 
