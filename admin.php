@@ -633,24 +633,23 @@ class Admin_Functions
 
             // 4. Insert into tbl_booking
             $reference_no = "REF" . date("YmdHis") . rand(100, 999); // Generate unique reference number
-            // Use Asia/Manila timezone and set check-in time to current local time; check-out = same time minus 2 hours (22-hour stay)
-            date_default_timezone_set('Asia/Manila');
-            $time_part = date('H:i:s');
+            // Set fixed times: 2:00 PM check-in, 12:00 PM check-out
+            $checkin_time = '14:00:00'; // 2:00 PM
+            $checkout_time = '12:00:00'; // 12:00 PM
             $stmt = $conn->prepare("INSERT INTO tbl_booking
-                (customers_id, customers_walk_in_id, adult, children, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
-                VALUES (:customers_id, :walkin_id, :adult, :children, :guests, :total_amount, :downpayment, :ref_no, CONCAT(:checkin, ' ', :time_part), DATE_SUB(CONCAT(:checkout, ' ', :time_part), INTERVAL 2 HOUR), NOW(), 0)");
+                (customers_id, customers_walk_in_id, guests_amnt, booking_totalAmount, booking_downpayment, reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive)
+                VALUES (:customers_id, :walkin_id, :guests, :total_amount, :downpayment, :ref_no, CONCAT(:checkin, ' ', :checkin_time), CONCAT(:checkout, ' ', :checkout_time), NOW(), 0)");
             $stmt->execute([
                 ':customers_id' => $customerId,
                 ':walkin_id' => $walkInId,
-                ':adult' => $data['adult'],
-                ':children' => $data['children'],
                 ':guests' => $data['adult'] + $data['children'],
                 ':total_amount' => $data['billing']['total'],
                 ':downpayment' => $data['payment']['amountPaid'],
                 ':ref_no' => $reference_no,
                 ':checkin' => $data['checkIn'],
                 ':checkout' => $data['checkOut'],
-                ':time_part' => $time_part
+                ':checkin_time' => $checkin_time,
+                ':checkout_time' => $checkout_time
             ]);
             $bookingId = $conn->lastInsertId();
 
@@ -672,12 +671,14 @@ class Admin_Functions
                 $roomtype_id = $stmtRoomType->fetchColumn();
 
                 // Insert into tbl_booking_room
-                $stmt = $conn->prepare("INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id)
-                    VALUES (:booking_id, :roomtype_id, :roomnumber_id)");
+                $stmt = $conn->prepare("INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id, bookingRoom_adult, bookingRoom_children)
+                    VALUES (:booking_id, :roomtype_id, :roomnumber_id, :adult, :children)");
                 $stmt->execute([
                     ':booking_id' => $bookingId,
                     ':roomtype_id' => $roomtype_id,
-                    ':roomnumber_id' => $room['roomnumber_id']
+                    ':roomnumber_id' => $room['roomnumber_id'],
+                    ':adult' => $data['adult'],
+                    ':children' => $data['children']
                 ]);
 
                 // Update room status to Occupied (status_id = 1)
@@ -862,15 +863,19 @@ class Admin_Functions
             $sqlUpdateRoom = "UPDATE tbl_rooms SET room_status_id = :status_id WHERE roomnumber_id = :room_id";
             $stmtUpdateRoom = $conn->prepare($sqlUpdateRoom);
 
-            // 0️⃣ Normalize times to Asia/Manila and enforce 22-hour stay
-            date_default_timezone_set('Asia/Manila');
-            $time_part = date('H:i:s');
+            // 0️⃣ Set fixed times: 2:00 PM check-in, 12:00 PM check-out
+            $checkin_time = '14:00:00'; // 2:00 PM
+            $checkout_time = '12:00:00'; // 12:00 PM
             $stmtTime = $conn->prepare("UPDATE tbl_booking 
                 SET 
-                    booking_checkin_dateandtime = CONCAT(DATE(booking_checkin_dateandtime), ' ', :time_part),
-                    booking_checkout_dateandtime = DATE_SUB(CONCAT(DATE(booking_checkout_dateandtime), ' ', :time_part), INTERVAL 2 HOUR)
+                    booking_checkin_dateandtime = CONCAT(DATE(booking_checkin_dateandtime), ' ', :checkin_time),
+                    booking_checkout_dateandtime = CONCAT(DATE(booking_checkout_dateandtime), ' ', :checkout_time)
                 WHERE booking_id = :booking_id");
-            $stmtTime->execute([':booking_id' => $bookingId, ':time_part' => $time_part]);
+            $stmtTime->execute([
+                ':booking_id' => $bookingId,
+                ':checkin_time' => $checkin_time,
+                ':checkout_time' => $checkout_time
+            ]);
 
             // 2️⃣ APPROVAL ROOM ASSIGNMENT LOGIC: Replace ANY existing room for this booking
             foreach ($roomIds as $newRoomId) {
@@ -2638,6 +2643,7 @@ class Admin_Functions
                 "payment_amount" => $payment_amount,
                 "remaining_balance" => $additional_amount - $payment_amount
             ]);
+            
         } catch (Exception $e) {
             $conn->rollBack();
             return json_encode([
@@ -2646,38 +2652,8 @@ class Admin_Functions
             ]);
         }
     }
-
-    // Get All Bookings for Calendar
-    function getAllBookings()
-    {
-        include "connection.php";
-        
-        try {
-            $sql = "SELECT 
-                        b.booking_id,
-                        DATE_FORMAT(b.booking_checkin_dateandtime, '%Y-%m-%d') as checkin_date,
-                        DATE_FORMAT(b.booking_checkout_dateandtime, '%Y-%m-%d') as checkout_date,
-                        br.roomnumber_id,
-                        rt.roomtype_id,
-                        rt.roomtype_name
-                    FROM tbl_booking b
-                    INNER JOIN tbl_booking_room br ON b.booking_id = br.booking_id
-                    INNER JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
-                    INNER JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
-                    WHERE b.booking_isArchive = 0
-                    ORDER BY b.booking_checkin_dateandtime ASC";
-            
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $bookings = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            return json_encode($bookings);
-            
-        } catch (PDOException $e) {
-            return json_encode(['error' => $e->getMessage()]);
-        }
-    }
 }
+
 
 $AdminClass = new Admin_Functions();
 
@@ -2961,14 +2937,6 @@ switch ($methodType) {
     // -------- Booking Extension with Payment -------- //
     case "extendBookingWithPayment":
         echo $AdminClass->extendBookingWithPayment($jsonData);
-        break;
-
-    default:
-        echo json_encode([
-            'success' => false,
-            'error' => 'Method not found: ' . $methodType,
-            'timestamp' => date('Y-m-d H:i:s')
-        ]);
         break;
 }
 

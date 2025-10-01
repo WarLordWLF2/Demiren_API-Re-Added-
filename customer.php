@@ -1352,11 +1352,14 @@ class Demiren_customer
         }
     }
 
+    // Upgraded Functions Here
     function login($json)
     {
         // {"username":"sabils","password":"sabils"}
         include "connection.php";
         $data = json_decode($json, true);
+        
+        // First, try to find user in tbl_customers_online (Customer login)
         $sql = "SELECT a.customers_online_id, a.customers_online_password, b.*
         FROM tbl_customers_online a 
         INNER JOIN tbl_customers b ON b.customers_online_id = a.customers_online_id
@@ -1379,7 +1382,8 @@ class Demiren_customer
                     unset($user["customers_online_password"]);
                     return [
                         "success" => true,
-                        "user" => $user
+                        "user" => $user,
+                        "user_type" => "customer"
                     ];
                 }
             } else {
@@ -1389,10 +1393,78 @@ class Demiren_customer
                     unset($user["customers_online_password"]);
                     return [
                         "success" => true,
-                        "user" => $user
+                        "user" => $user,
+                        "user_type" => "customer"
                     ];
                 }
             }
+        }
+
+        // If not found in customers, try to find in tbl_employee (Employee/Admin login)
+        $sql = "SELECT e.*, ul.userlevel_name 
+                FROM tbl_employee e 
+                LEFT JOIN tbl_user_level ul ON e.employee_user_level_id = ul.userlevel_id 
+                WHERE e.employee_username = :employee_username AND (e.employee_status = 'Active' OR e.employee_status = 'Offline')";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":employee_username", $data["username"]);
+        $stmt->execute();
+
+        $employee = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($employee) {
+            $storedPassword = $employee["employee_password"];
+            $inputPassword = $data["password"];
+
+            // Check if the stored password is hashed (starts with $2y$)
+            if (password_get_info($storedPassword)['algo'] !== null) {
+                // Password is hashed, use password_verify
+                if (password_verify($inputPassword, $storedPassword)) {
+                    // Update employee status to 'Active' when logging in
+                    $updateSql = "UPDATE tbl_employee SET employee_status = 'Active', employee_updated_at = NOW() WHERE employee_id = :employee_id";
+                    $updateStmt = $conn->prepare($updateSql);
+                    $updateStmt->bindParam(":employee_id", $employee["employee_id"]);
+                    $updateStmt->execute();
+                    
+                    // Remove password from returned data for security
+                    unset($employee["employee_password"]);
+                    return [
+                        "success" => true,
+                        "user" => $employee,
+                        "user_type" => $employee["userlevel_name"] === "Admin" ? "admin" : "employee"
+                    ];
+                }
+            } else {
+                // Password is plain text (legacy), compare directly
+                if ($inputPassword === $storedPassword) {
+                    // Update employee status to 'Active' when logging in
+                    $updateSql = "UPDATE tbl_employee SET employee_status = 'Active', employee_updated_at = NOW() WHERE employee_id = :employee_id";
+                    $updateStmt = $conn->prepare($updateSql);
+                    $updateStmt->bindParam(":employee_id", $employee["employee_id"]);
+                    $updateStmt->execute();
+                    
+                    // Remove password from returned data for security
+                    unset($employee["employee_password"]);
+                    return [
+                        "success" => true,
+                        "user" => $employee,
+                        "user_type" => $employee["userlevel_name"] === "Admin" ? "admin" : "employee"
+                    ];
+                }
+            }
+        }
+
+        // Check if username exists in customers_online table but no online account
+        $checkCustomerSql = "SELECT customers_online_id FROM tbl_customers_online WHERE customers_online_username = :username";
+        $checkCustomerStmt = $conn->prepare($checkCustomerSql);
+        $checkCustomerStmt->bindParam(":username", $data["username"]);
+        $checkCustomerStmt->execute();
+        $existingCustomer = $checkCustomerStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($existingCustomer) {
+            return [
+                "success" => false,
+                "message" => "User does not exist, Please Register first"
+            ];
         }
 
         return [
@@ -1400,6 +1472,9 @@ class Demiren_customer
             "message" => "Invalid username or password"
         ];
     }
+    
+
+// End of Upgraded Functions
 
     function employeeLogin($json)
     {
@@ -1833,9 +1908,12 @@ switch ($operation) {
     case "removeBookingRoom":
         echo json_encode($demiren_customer->removeBookingRoom($json));
         break;
+        
     case "login":
         echo json_encode($demiren_customer->login($json));
         break;
+    
+
     case "getBookingSummary":
         echo json_encode($demiren_customer->getBookingSummary($json));
         break;
