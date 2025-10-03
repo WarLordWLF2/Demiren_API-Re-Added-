@@ -566,14 +566,14 @@ class Transactions
         $booking_id = $json["booking_id"];
 
         try {
-            // Check if there are any pending charges not yet billed
+            // Check if there are any charges that need billing processing
+            // This should check for charges that exist but aren't properly included in billing calculations
             $pendingChargesQuery = $conn->prepare("
                 SELECT COUNT(*) as pending_count
                 FROM tbl_booking_charges bc
                 JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
-                LEFT JOIN tbl_billing b ON br.booking_id = b.booking_id
                 WHERE br.booking_id = :booking_id 
-                AND (b.billing_id IS NULL OR bc.booking_charges_id > 0)
+                AND bc.charges_status_id = 1
             ");
             $pendingChargesQuery->bindParam(':booking_id', $booking_id);
             $pendingChargesQuery->execute();
@@ -593,10 +593,10 @@ class Transactions
                 "success" => true,
                 "pending_charges" => $pendingCount,
                 "assigned_rooms" => $roomCount,
-                "is_complete" => $pendingCount == 0, // Only check for pending charges, not room assignments
+                "is_complete" => $pendingCount == 0, // Only check for truly pending charges (status = 1)
                 "message" => $pendingCount > 0 ? 
-                    "There are {$pendingCount} pending charges that need to be included in billing." :
-                    ($roomCount > 0 ? "Billing validation complete." : "Billing validation complete. Note: No rooms assigned yet.")
+                    "There are {$pendingCount} charges with pending status that need to be approved before billing." :
+                    ($roomCount > 0 ? "Billing validation complete. All charges are ready for invoice creation." : "Billing validation complete. Note: No rooms assigned yet.")
             ];
 
             echo json_encode($result);
@@ -782,8 +782,8 @@ class Transactions
 
             // Add charge to booking
             $addCharge = $conn->prepare("
-                INSERT INTO tbl_booking_charges (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity)
-                VALUES (:booking_room_id, :charges_master_id, :charge_price, :quantity)
+                INSERT INTO tbl_booking_charges (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity, charges_status_id)
+                VALUES (:booking_room_id, :charges_master_id, :charge_price, :quantity, 2)
             ");
             $addCharge->bindParam(':booking_room_id', $booking_room_id);
             $addCharge->bindParam(':charges_master_id', $charges_master_id);
