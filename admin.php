@@ -1503,163 +1503,6 @@ class Admin_Functions
         }
     }
 
-<<<<<<< HEAD
-=======
-    function getDetailedBookingSalesByMonth()
-    {
-        include "connection.php";
-
-        $month = $_POST['month'] ?? '';
-        $year = $_POST['year'] ?? date('Y');
-
-        // Convert month name to number
-        $monthMap = [
-            'January' => 1, 'February' => 2, 'March' => 3, 'April' => 4,
-            'May' => 5, 'June' => 6, 'July' => 7, 'August' => 8,
-            'September' => 9, 'October' => 10, 'November' => 11, 'December' => 12
-        ];
-
-        $monthNumber = $monthMap[$month] ?? 0;
-        if ($monthNumber === 0) {
-            return json_encode(["error" => "Invalid month"]);
-        }
-
-        // Query using booking_id from tbl_billing to validate the relationship chain
-        // Also include walk-in customers
-        $sql = "SELECT 
-                    b.booking_id,
-                    b.reference_no,
-                    i.invoice_date,
-                    rt.roomtype_name,
-                    rt.roomtype_price,
-                    COALESCE(c.customers_fname, cw.customers_walk_in_fname) as customer_fname,
-                    COALESCE(c.customers_lname, cw.customers_walk_in_lname) as customer_lname,
-                    bl.billing_total_amount,
-                    i.invoice_total_amount
-                FROM tbl_billing bl
-                INNER JOIN tbl_booking b ON bl.booking_id = b.booking_id
-                INNER JOIN tbl_invoice i ON bl.billing_id = i.billing_id
-                INNER JOIN tbl_booking_room br ON bl.booking_id = br.booking_id
-                INNER JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
-                LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-                LEFT JOIN tbl_customers_walk_in cw ON b.customers_walk_in_id = cw.customers_walk_in_id
-                WHERE i.invoice_status_id = 1 
-                AND MONTH(i.invoice_date) = ? 
-                AND YEAR(i.invoice_date) = ?
-                ORDER BY i.invoice_date DESC";
-
-        try {
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(1, $monthNumber, PDO::PARAM_INT);
-            $stmt->bindParam(2, $year, PDO::PARAM_INT);
-            $stmt->execute();
-            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            return count($result) > 0 ? json_encode($result) : json_encode([]);
-        } catch (PDOException $e) {
-            return json_encode(["error" => $e->getMessage()]);
-        }
-    }
-
-    // Get Active Bookings (bookings without invoices = not checked out)
-    function getActiveBookingsForDashboard()
-    {
-        include "connection.php";
-
-        try {
-            // Count only active bookings that don't have invoices (not checked out)
-            $sql = "SELECT 
-                        COUNT(DISTINCT b.booking_id) as active_bookings_count
-                    FROM tbl_booking b
-                    LEFT JOIN tbl_billing bl ON b.booking_id = bl.booking_id
-                    LEFT JOIN tbl_invoice i ON bl.billing_id = i.billing_id
-                    WHERE b.booking_isArchive = 0
-                    AND b.booking_checkin_dateandtime <= NOW()  
-                    AND b.booking_checkout_dateandtime >= NOW()
-                    AND i.invoice_id IS NULL";
-
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Ensure we return a number, not null
-            $activeBookingsCount = $result['active_bookings_count'] ?? 0;
-
-            return json_encode([
-                'active_bookings_count' => (int)$activeBookingsCount
-            ]);
-        } catch (PDOException $e) {
-            return json_encode([
-                'error' => $e->getMessage(),
-                'active_bookings_count' => 0
-            ]);
-        }
-    }
-
-    // Get Available Rooms Count
-    function getAvailableRoomsCount()
-    {
-        include "connection.php";
-
-        try {
-            $sql = "SELECT 
-                        COUNT(r.roomnumber_id) as total_available_rooms,
-                        COUNT(CASE WHEN rt.roomtype_id = 1 THEN 1 END) as standard_twin_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 2 THEN 1 END) as single_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 3 THEN 1 END) as double_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 4 THEN 1 END) as triple_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 5 THEN 1 END) as quadruple_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 6 THEN 1 END) as family_a_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 7 THEN 1 END) as family_b_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 8 THEN 1 END) as family_c_available
-                    FROM tbl_rooms r
-                    INNER JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
-                    WHERE r.room_status_id = 3
-                    AND r.roomnumber_id NOT IN (
-                        SELECT DISTINCT br.roomnumber_id
-                        FROM tbl_booking_room br
-                        INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
-                        WHERE b.booking_isArchive = 0
-                        AND b.booking_checkin_dateandtime <= NOW()
-                        AND b.booking_checkout_dateandtime >= NOW()
-                    )";
-
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            return json_encode($result);
-        } catch (PDOException $e) {
-            return json_encode(["error" => $e->getMessage()]);
-        }
-    }
-
-    function getAllCustomersRooms($data)
-    {
-        include 'connection.php';
-
-        $sql = "SELECT a.*, c.roomtype_name
-            FROM tbl_booking_room a
-            INNER JOIN tbl_booking b ON a.booking_id = b.booking_id
-            INNER JOIN tbl_roomtype c ON a.roomtype_id = c.roomtype_id
-            WHERE a.booking_id = :booking_id AND a.roomnumber_id IS NOT NULL";
-
-        try {
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':booking_id', $data['booking_id']);
-            $stmt->execute();
-
-            $rooms = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            echo json_encode($rooms);
-        } catch (PDOException $e) {
-            echo json_encode([
-                'message' => 'Database error: ' . $e->getMessage()
-            ]);
-        }
-    }
-
->>>>>>> dcd391ec4f4c6cc99b4282bfd0a5782153f0cad2
     function getCustomerBills($data)
     {
         include 'connection.php';
@@ -2806,7 +2649,6 @@ class Admin_Functions
             ]);
         }
     }
-<<<<<<< HEAD
 
     function extendMultiRoomBookingWithPayment($data)
     {
@@ -3806,8 +3648,6 @@ class Admin_Functions
             ]);
         }
     }
-=======
->>>>>>> dcd391ec4f4c6cc99b4282bfd0a5782153f0cad2
 }
 
 
@@ -3833,29 +3673,9 @@ switch ($methodType) {
         echo $AdminClass->getInvoicesData();
         break;
 
-<<<<<<< HEAD
     case "getActiveBookingsForDashboard":
         echo $AdminClass->getActiveBookingsForDashboard();
         break;
-=======
-    case "getDetailedBookingSalesByMonth":
-        echo $AdminClass->getDetailedBookingSalesByMonth();
-        break;
-
-    case "getActiveBookingsForDashboard":
-        echo $AdminClass->getActiveBookingsForDashboard();
-        break;
-
-    case "getAvailableRoomsCount":
-        echo $AdminClass->getAvailableRoomsCount();
-        break;
-
-    case "getAllBookings":
-        echo $AdminClass->getAllBookings();
-        break;
-
-    // --------------------------------- Approving Customer Bookings --------------------------------- //
->>>>>>> dcd391ec4f4c6cc99b4282bfd0a5782153f0cad2
 
     case "getBookingsWithBillingStatus":
         echo $AdminClass->getBookingsWithBillingStatus();
@@ -3929,16 +3749,8 @@ switch ($methodType) {
         echo $AdminClass->admin_login($jsonData);
         break;
 
-<<<<<<< HEAD
     case "getDetailedBookingSalesByMonth":
         echo $AdminClass->getDetailedBookingSalesByMonth();
-=======
-    // Room status toggle between Vacant and Under-Maintenance
-    case "toggleRoomStatus":
-        $data = array();
-        $data["room_id"] = isset($_POST["room_id"]) ? $_POST["room_id"] : 0;
-        echo $AdminClass->toggleRoomStatus($data);
->>>>>>> dcd391ec4f4c6cc99b4282bfd0a5782153f0cad2
         break;
 
     case "viewCustomers":
@@ -4113,7 +3925,6 @@ switch ($methodType) {
     case "extendBookingWithPayment":
         echo $AdminClass->extendBookingWithPayment($jsonData);
         break;
-<<<<<<< HEAD
     case "extendMultiRoomBookingWithPayment":
         echo $AdminClass->extendMultiRoomBookingWithPayment($jsonData);
         break;
@@ -4154,8 +3965,6 @@ switch ($methodType) {
     case "updateAdminProfile":
         echo json_encode($AdminClass->updateAdminProfile(json_encode($jsonData)));
         break;
-=======
->>>>>>> dcd391ec4f4c6cc99b4282bfd0a5782153f0cad2
 }
 
 
