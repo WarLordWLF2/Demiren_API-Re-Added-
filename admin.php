@@ -3648,6 +3648,307 @@ class Admin_Functions
             ]);
         }
     }
+
+    // ------------------------------------------------------- Transaction History Functions ------------------------------------------------------- //
+
+    function getTransactionHistory($data)
+    {
+        include "connection.php";
+
+        try {
+            $limit = isset($data['limit']) ? (int)$data['limit'] : 50;
+            $offset = isset($data['offset']) ? (int)$data['offset'] : 0;
+            $transaction_type = isset($data['transaction_type']) ? $data['transaction_type'] : 'all';
+            $status_filter = isset($data['status_filter']) ? $data['status_filter'] : 'all';
+            $date_from = isset($data['date_from']) ? $data['date_from'] : null;
+            $date_to = isset($data['date_to']) ? $data['date_to'] : null;
+
+            // Start with a simple booking query first
+            $sql = "SELECT 
+                        'booking' as transaction_type,
+                        b.booking_id as transaction_id,
+                        b.reference_no,
+                        CONCAT(COALESCE(c.customers_fname, w.customers_walk_in_fname), ' ', COALESCE(c.customers_lname, w.customers_walk_in_lname)) AS customer_name,
+                        COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+                        COALESCE(c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
+                        b.booking_totalAmount as amount,
+                        b.booking_downpayment,
+                        'Active' as status,
+                        b.booking_checkin_dateandtime,
+                        b.booking_checkout_dateandtime,
+                        b.booking_created_at as transaction_date,
+                        'Booking created/updated' as description,
+                        'admin' as performed_by_type,
+                        'System' as performed_by_name,
+                        '' as room_number,
+                        '' as amenity_name,
+                        'success' as status_color
+                    FROM tbl_booking b
+                    LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                    LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                    WHERE b.booking_isArchive = 0";
+
+            // Add filters
+            $where_conditions = [];
+            $params = [];
+
+            if ($transaction_type !== 'all' && $transaction_type !== 'booking') {
+                // If not booking type, return empty for now
+                return [
+                    'success' => true,
+                    'transactions' => [],
+                    'total_count' => 0,
+                    'current_page' => 1,
+                    'total_pages' => 1
+                ];
+            }
+
+            if ($status_filter !== 'all') {
+                // Since we don't have booking status, we'll skip this filter for now
+                // $where_conditions[] = "bs.booking_status_name = :status_filter";
+                // $params[':status_filter'] = $status_filter;
+            }
+
+            if ($date_from) {
+                $where_conditions[] = "DATE(b.booking_created_at) >= :date_from";
+                $params[':date_from'] = $date_from;
+            }
+
+            if ($date_to) {
+                $where_conditions[] = "DATE(b.booking_created_at) <= :date_to";
+                $params[':date_to'] = $date_to;
+            }
+
+            // Add WHERE conditions
+            if (!empty($where_conditions)) {
+                $sql .= " AND " . implode(" AND ", $where_conditions);
+            }
+
+            $sql .= " ORDER BY b.booking_created_at DESC LIMIT :limit OFFSET :offset";
+
+            $stmt = $conn->prepare($sql);
+            
+            // Bind parameters
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value);
+            }
+            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            
+            $stmt->execute();
+            $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // Get total count
+            $count_sql = "SELECT COUNT(*) as total FROM tbl_booking b
+                         LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                         LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                         WHERE b.booking_isArchive = 0";
+            
+            if (!empty($where_conditions)) {
+                $count_sql .= " AND " . implode(" AND ", $where_conditions);
+            }
+            
+            $count_stmt = $conn->prepare($count_sql);
+            foreach ($params as $key => $value) {
+                $count_stmt->bindValue($key, $value);
+            }
+            $count_stmt->execute();
+            $total_count = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
+
+            return [
+                'success' => true,
+                'transactions' => $transactions,
+                'total_count' => $total_count,
+                'current_page' => floor($offset / $limit) + 1,
+                'total_pages' => ceil($total_count / $limit)
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Database error: ' . $e->getMessage(),
+                'transactions' => [],
+                'total_count' => 0,
+                'current_page' => 1,
+                'total_pages' => 1
+            ];
+        }
+    }
+
+    function getTransactionStats()
+    {
+        include "connection.php";
+
+        try {
+            // Simple stats for now - just booking data
+            $sql = "SELECT 
+                        COUNT(*) as total_transactions,
+                        SUM(booking_totalAmount) as total_amount_today
+                    FROM tbl_booking 
+                    WHERE DATE(booking_created_at) = CURDATE() 
+                    AND booking_isArchive = 0";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $today_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Week stats
+            $week_sql = "SELECT 
+                            COUNT(*) as total_transactions,
+                            SUM(booking_totalAmount) as total_amount_week
+                        FROM tbl_booking 
+                        WHERE YEARWEEK(booking_created_at) = YEARWEEK(CURDATE()) 
+                        AND booking_isArchive = 0";
+
+            $stmt = $conn->prepare($week_sql);
+            $stmt->execute();
+            $week_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Month stats
+            $month_sql = "SELECT 
+                            COUNT(*) as total_transactions,
+                            SUM(booking_totalAmount) as total_amount_month
+                        FROM tbl_booking 
+                        WHERE YEAR(booking_created_at) = YEAR(CURDATE()) 
+                        AND MONTH(booking_created_at) = MONTH(CURDATE()) 
+                        AND booking_isArchive = 0";
+
+            $stmt = $conn->prepare($month_sql);
+            $stmt->execute();
+            $month_stats = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                'success' => true,
+                'today' => $today_stats,
+                'week' => $week_stats,
+                'month' => $month_stats
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Database error: ' . $e->getMessage(),
+                'today' => ['total_transactions' => 0, 'total_amount_today' => 0],
+                'week' => ['total_transactions' => 0, 'total_amount_week' => 0],
+                'month' => ['total_transactions' => 0, 'total_amount_month' => 0]
+            ];
+        }
+    }
+
+    function searchTransactions($data)
+    {
+        include "connection.php";
+
+        try {
+            $search_term = isset($data['search_term']) ? '%' . $data['search_term'] . '%' : '%%';
+            $limit = isset($data['limit']) ? (int)$data['limit'] : 20;
+
+            $sql = "SELECT 
+                        'booking' as transaction_type,
+                        b.booking_id as transaction_id,
+                        b.reference_no,
+                        CONCAT(COALESCE(c.customers_fname, w.customers_walk_in_fname), ' ', COALESCE(c.customers_lname, w.customers_walk_in_lname)) AS customer_name,
+                        COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+                        'Active' as status,
+                        b.booking_created_at as transaction_date,
+                        'Booking transaction' as description,
+                        'booking' as status_color
+                    FROM tbl_booking b
+                    LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+                    LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
+                    WHERE (b.reference_no LIKE :search_term 
+                           OR c.customers_fname LIKE :search_term 
+                           OR c.customers_lname LIKE :search_term
+                           OR w.customers_walk_in_fname LIKE :search_term
+                           OR w.customers_walk_in_lname LIKE :search_term
+                           OR c.customers_email LIKE :search_term
+                           OR w.customers_walk_in_email LIKE :search_term)
+                    AND b.booking_isArchive = 0
+                    ORDER BY b.booking_created_at DESC
+                    LIMIT :limit";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':search_term', $search_term);
+            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
+            $stmt->execute();
+            
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        } catch (Exception $e) {
+            return [];
+        }
+    }
+
+    function testTransactionAPI()
+    {
+        include "connection.php";
+
+        try {
+            // Test basic database connection
+            $sql = "SELECT COUNT(*) as booking_count FROM tbl_booking WHERE booking_isArchive = 0";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            return [
+                'success' => true,
+                'message' => 'Database connection successful',
+                'booking_count' => $result['booking_count'],
+                'timestamp' => date('Y-m-d H:i:s')
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Database error: ' . $e->getMessage(),
+                'timestamp' => date('Y-m-d H:i:s')
+            ];
+        }
+    }
+
+    function addSampleBooking()
+    {
+        include "connection.php";
+
+        try {
+            // Check if there are any existing bookings
+            $check_sql = "SELECT COUNT(*) as count FROM tbl_booking WHERE booking_isArchive = 0";
+            $check_stmt = $conn->prepare($check_sql);
+            $check_stmt->execute();
+            $count = $check_stmt->fetch(PDO::FETCH_ASSOC)['count'];
+
+            if ($count > 0) {
+                return [
+                    'success' => true,
+                    'message' => 'Bookings already exist',
+                    'count' => $count
+                ];
+            }
+
+            // Add a sample booking
+            $insert_sql = "INSERT INTO tbl_booking 
+                          (customers_id, customers_walk_in_id, guests_amnt, booking_totalAmount, booking_downpayment, 
+                           reference_no, booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_isArchive) 
+                          VALUES 
+                          (NULL, NULL, 2, 2360, 500, 'REF-' . UNIX_TIMESTAMP(), 
+                           DATE_ADD(NOW(), INTERVAL 1 DAY), DATE_ADD(NOW(), INTERVAL 3 DAY), NOW(), 0)";
+
+            $stmt = $conn->prepare($insert_sql);
+            $stmt->execute();
+
+            return [
+                'success' => true,
+                'message' => 'Sample booking added successfully',
+                'booking_id' => $conn->lastInsertId()
+            ];
+
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'error' => 'Database error: ' . $e->getMessage()
+            ];
+        }
+    }
 }
 
 
@@ -3729,11 +4030,15 @@ switch ($methodType) {
         break;
 
     case "getCustomerInvoice":
-        echo $AdminClass->getBookingInvoice($jsonData);
+        echo getCustomerInvoice($jsonData);
+        break;
+
+    case "checkInvoiceStatus":
+        echo checkInvoiceStatus($jsonData);
         break;
 
     case "getCustomerBilling":
-        echo $AdminClass->getCustomerBills($jsonData);
+        echo getCustomerBilling($jsonData);
         break;
 
     case "requestCustomerRooms":
@@ -3965,8 +4270,151 @@ switch ($methodType) {
     case "updateAdminProfile":
         echo json_encode($AdminClass->updateAdminProfile(json_encode($jsonData)));
         break;
+
+        // Transaction History
+    case "getTransactionHistory":
+        echo json_encode($AdminClass->getTransactionHistory($jsonData));
+        break;
+
+    case "getTransactionStats":
+        echo json_encode($AdminClass->getTransactionStats());
+        break;
+
+    case "searchTransactions":
+        echo json_encode($AdminClass->searchTransactions($jsonData));
+        break;
+
+    case "testTransactionAPI":
+        echo json_encode($AdminClass->testTransactionAPI());
+        break;
+
+    case "addSampleBooking":
+        echo json_encode($AdminClass->addSampleBooking());
+        break;
 }
 
+
+    // Check if booking has a complete invoice
+    function checkInvoiceStatus($data)
+    {
+        include "connection.php";
+
+        $reference_no = $data['reference_no'];
+
+        // Check if there's an invoice with matching reference number and complete status
+        $sql = "SELECT i.invoice_id, i.invoice_status_id, b.billing_invoice_number
+                FROM tbl_invoice i
+                JOIN tbl_billing b ON i.billing_id = b.billing_id
+                JOIN tbl_booking bk ON b.booking_id = bk.booking_id
+                WHERE bk.reference_no = :reference_no 
+                AND i.invoice_status_id = 1";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":reference_no", $reference_no);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $hasCompleteInvoice = $result !== false;
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        return json_encode([
+            'success' => true,
+            'has_complete_invoice' => $hasCompleteInvoice,
+            'invoice_data' => $result
+        ]);
+    }
+
+    // Get customer invoice data by reference number
+    function getCustomerInvoice($data)
+    {
+        include "connection.php";
+
+        $reference_no = $data['reference_no'];
+
+        $query = "SELECT 
+            a.booking_id,
+            a.reference_no,
+            CONCAT(b.customers_fname, ' ', b.customers_lname) AS customer_name,
+            c.billing_id,
+            c.billing_total_amount,
+            c.billing_balance,
+            c.billing_downpayment,
+            d.invoice_id,
+            d.invoice_date,
+            d.invoice_time,
+            d.invoice_total_amount,
+            d.invoice_status_id,
+            e.payment_method_name,
+            f.employee_fname
+        FROM tbl_booking a
+        LEFT JOIN tbl_customers b ON a.customers_id = b.customers_id
+        LEFT JOIN tbl_billing c ON a.booking_id = c.booking_id
+        LEFT JOIN tbl_invoice d ON c.billing_id = d.billing_id
+        LEFT JOIN tbl_payment_method e ON d.payment_method_id = e.payment_method_id
+        LEFT JOIN tbl_employee f ON d.employee_id = f.employee_id
+        WHERE a.reference_no = :reference_no
+        LIMIT 1";
+
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(":reference_no", $reference_no, PDO::PARAM_STR);
+        $stmt->execute();
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        if ($invoice && $invoice['invoice_id']) {
+            return json_encode(["success" => true, "invoice_data" => $invoice]);
+        } else {
+            return json_encode(["success" => false, "message" => "No invoice found"]);
+        }
+    }
+
+    // Get customer billing data by reference number
+    function getCustomerBilling($data)
+    {
+        include 'connection.php';
+
+        $reference_no = $data['reference_no'];
+
+        $sql = "SELECT 
+                a.billing_id,
+                a.booking_id,
+                a.billing_total_amount,
+                a.billing_balance,
+                a.billing_downpayment,
+                a.billing_created_at,
+                b.reference_no
+            FROM tbl_billing a
+            INNER JOIN tbl_booking b ON a.booking_id = b.booking_id
+            WHERE b.reference_no = :reference_no
+            ORDER BY a.billing_created_at DESC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':reference_no', $reference_no);
+        $stmt->execute();
+
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        return json_encode(["success" => true, "billing_data" => $result]);
+    }
 
 // Needs fixing/update
 // 1. approveCustomerBooking and declineCustomerBooking need to upgrade their way of calling status

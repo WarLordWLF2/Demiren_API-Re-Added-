@@ -818,11 +818,21 @@ class Transactions
             CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
             bi.billing_id,
             i.invoice_id,
-            i.invoice_status_id
+            i.invoice_status_id,
+            CASE 
+                WHEN i.invoice_status_id = 1 THEN 'Checked-Out'
+                ELSE COALESCE(bs.booking_status_name, 'Pending')
+            END AS booking_status
         FROM tbl_booking b
         LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-        LEFT JOIN tbl_billing bi ON b.booking_id = bi.booking_id
+        LEFT JOIN tbl_billing bi ON b.booking_id = bi.billing_id
         LEFT JOIN tbl_invoice i ON bi.billing_id = i.billing_id
+        LEFT JOIN tbl_booking_history bh ON b.booking_id = bh.booking_id
+        LEFT JOIN tbl_booking_status bs ON bh.status_id = bs.booking_status_id
+        WHERE (
+            bs.booking_status_name = 'Checked-In' 
+            OR i.invoice_status_id = 1
+        )
         ORDER BY b.booking_created_at DESC
     ";
 

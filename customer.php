@@ -9,11 +9,11 @@ class Demiren_customer
         // {"customers_id":1}
         include "connection.php";
         $json = json_decode($json, true);
-        $sql = "SELECT a.customers_fname, a.customers_lname, a.customers_email, a.customers_phone_number, a.customers_date_of_birth, b.nationality_id, b.nationality_name, c.customer_identification_attachment_filename, d.customers_online_username, d.customers_online_profile_image, d.customers_online_authentication_status
+        $sql = "SELECT a.*, b.*, c.*, d.*
                 FROM tbl_customers AS a
-                INNER JOIN tbl_nationality AS b ON b.nationality_id = a.nationality_id
-                INNER JOIN tbl_customer_identification AS c ON c.identification_id = a.identification_id
-                INNER JOIN tbl_customers_online AS d ON d.customers_online_id = a.customers_online_id
+                LEFT JOIN tbl_nationality AS b ON b.nationality_id = a.nationality_id
+                LEFT JOIN tbl_customer_identification AS c ON c.identification_id = a.identification_id
+                LEFT JOIN tbl_customers_online AS d ON d.customers_online_id = a.customers_online_id
                 WHERE a.customers_id = :customers_id";
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(":customers_id", $json["customers_id"]);
@@ -34,15 +34,23 @@ class Demiren_customer
 
             $conn->beginTransaction();
 
+            // ✅ Aliased fields so keys match frontend JSON
             $stmt = $conn->prepare("
-                SELECT a.customers_fname, a.customers_lname, a.customers_phone_number, 
-                a.customers_email, a.customers_date_of_birth, b.nationality_name, 
-                d.customers_online_username, a.nationality_id, a.customers_online_id
-                FROM tbl_customers AS a
-                INNER JOIN tbl_nationality AS b ON b.nationality_id = a.nationality_id
-                INNER JOIN tbl_customers_online AS d ON d.customers_online_id = a.customers_online_id
-                WHERE a.customers_id = :customers_id
-            ");
+            SELECT 
+                a.customers_fname, 
+                a.customers_lname, 
+                a.customers_phone AS customers_phone_number, 
+                a.customers_email, 
+                a.customers_birthdate AS customers_date_of_birth, 
+                b.nationality_name, 
+                d.customers_online_username, 
+                a.nationality_id, 
+                a.customers_online_id
+            FROM tbl_customers AS a
+            INNER JOIN tbl_nationality AS b ON b.nationality_id = a.nationality_id
+            INNER JOIN tbl_customers_online AS d ON d.customers_online_id = a.customers_online_id
+            WHERE a.customers_id = :customers_id
+        ");
             $stmt->execute([":customers_id" => $customers_id]);
             $currentData = $stmt->fetch(PDO::FETCH_ASSOC);
 
@@ -54,10 +62,10 @@ class Demiren_customer
             // Update first name if changed
             if (isset($json["customers_fname"]) && $json["customers_fname"] !== $currentData["customers_fname"]) {
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers 
-                    SET customers_fname = :customers_fname 
-                    WHERE customers_id = :customers_id
-                ");
+                UPDATE tbl_customers 
+                SET customers_fname = :customers_fname 
+                WHERE customers_id = :customers_id
+            ");
                 $stmt->execute([
                     ":customers_fname" => $json["customers_fname"],
                     ":customers_id" => $customers_id
@@ -67,10 +75,10 @@ class Demiren_customer
             // Update last name if changed
             if (isset($json["customers_lname"]) && $json["customers_lname"] !== $currentData["customers_lname"]) {
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers 
-                    SET customers_lname = :customers_lname 
-                    WHERE customers_id = :customers_id
-                ");
+                UPDATE tbl_customers 
+                SET customers_lname = :customers_lname 
+                WHERE customers_id = :customers_id
+            ");
                 $stmt->execute([
                     ":customers_lname" => $json["customers_lname"],
                     ":customers_id" => $customers_id
@@ -80,10 +88,10 @@ class Demiren_customer
             // Update phone number if changed
             if (isset($json["customers_phone_number"]) && $json["customers_phone_number"] !== $currentData["customers_phone_number"]) {
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers 
-                    SET customers_phone_number = :customers_phone_number 
-                    WHERE customers_id = :customers_id
-                ");
+                UPDATE tbl_customers 
+                SET customers_phone = :customers_phone_number 
+                WHERE customers_id = :customers_id
+            ");
                 $stmt->execute([
                     ":customers_phone_number" => $json["customers_phone_number"],
                     ":customers_id" => $customers_id
@@ -94,9 +102,9 @@ class Demiren_customer
             if (isset($json["customers_email"]) && $json["customers_email"] !== $currentData["customers_email"]) {
                 // First verify email doesn't already exist
                 $stmt = $conn->prepare("
-                    SELECT customers_id FROM tbl_customers 
-                    WHERE customers_email = :customers_email AND customers_id != :customers_id
-                ");
+                SELECT customers_id FROM tbl_customers 
+                WHERE customers_email = :customers_email AND customers_id != :customers_id
+            ");
                 $stmt->execute([
                     ":customers_email" => $json["customers_email"],
                     ":customers_id" => $customers_id
@@ -108,10 +116,10 @@ class Demiren_customer
                 }
 
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers 
-                    SET customers_email = :customers_email 
-                    WHERE customers_id = :customers_id
-                ");
+                UPDATE tbl_customers 
+                SET customers_email = :customers_email 
+                WHERE customers_id = :customers_id
+            ");
                 $stmt->execute([
                     ":customers_email" => $json["customers_email"],
                     ":customers_id" => $customers_id
@@ -130,13 +138,14 @@ class Demiren_customer
                     ":customers_id" => $customers_id
                 ]);
             }
+
             // Update username if changed
             if (isset($json["customers_online_username"]) && $json["customers_online_username"] !== $currentData["customers_online_username"]) {
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers_online 
-                    SET customers_online_username = :customers_online_username 
-                    WHERE customers_online_id = :customers_online_id
-                ");
+                UPDATE tbl_customers_online 
+                SET customers_online_username = :customers_online_username 
+                WHERE customers_online_id = :customers_online_id
+            ");
                 $stmt->execute([
                     ":customers_online_username" => $json["customers_online_username"],
                     ":customers_online_id" => $currentData["customers_online_id"]
@@ -146,10 +155,10 @@ class Demiren_customer
             // Update date of birth if changed
             if (isset($json["customers_date_of_birth"]) && $json["customers_date_of_birth"] !== $currentData["customers_date_of_birth"]) {
                 $stmt = $conn->prepare("
-                    UPDATE tbl_customers 
-                    SET customers_date_of_birth = :customers_date_of_birth 
-                    WHERE customers_id = :customers_id
-                ");
+                UPDATE tbl_customers 
+                SET customers_birthdate = :customers_date_of_birth 
+                WHERE customers_id = :customers_id
+            ");
                 $stmt->execute([
                     ":customers_date_of_birth" => $json["customers_date_of_birth"],
                     ":customers_id" => $customers_id
@@ -172,6 +181,7 @@ class Demiren_customer
             return -100;
         }
     }
+
     //date 
 
 
@@ -291,12 +301,12 @@ class Demiren_customer
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
                 (customers_id, customers_walk_in_id, guests_amnt, booking_downpayment, 
-                 booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
-                 booking_totalAmount, booking_isArchive, reference_no) 
+                booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
+                booking_totalAmount, booking_isArchive, reference_no) 
             VALUES 
                 (NULL, :walkin_id, :guestTotal, :downpayment, 
-                 :checkin, :checkout, NOW(), 
-                 :totalAmount, 0, :reference_no)
+                :checkin, :checkout, NOW(), 
+                :totalAmount, 0, :reference_no)
         ");
             $stmt->bindParam(":walkin_id", $walkInCustomerId);
             $stmt->bindParam(":guestTotal", $totalGuests);
@@ -355,6 +365,17 @@ class Demiren_customer
                 $stmt->bindParam(":bookingRoom_adult", $room["adultCount"]);
                 $stmt->bindParam(":bookingRoom_children", $room["childrenCount"]);
                 $stmt->execute();
+                if ($room["bedCount"] > 0) {
+                    $bookingId = $conn->lastInsertId();
+                    $totalCharges = $room["bedCount"] * 400;
+                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total)
+                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(":booking_room_id", $bookingId);
+                    $stmt->bindParam(":booking_charges_quantity", $room["bedCount"]);
+                    $stmt->bindParam(":booking_charges_total", $totalCharges);
+                    $stmt->execute();
+                }
             }
 
             // ✅ Step 5: Insert booking history (keep from your original code)
@@ -363,8 +384,19 @@ class Demiren_customer
             $stmt->bindParam(":booking_id", $bookingId);
             $stmt->execute();
 
+            $sql = "INSERT INTO tbl_billing(booking_id, payment_method_id, billing_total_amount, billing_dateandtime, billing_vat, billing_balance, billing_downpayment) 
+                VALUES (:booking_id, :payment_method_id, :total_amount, NOW(), :billing_vat, :billing_balance, :billing_downpayment)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":booking_id", $bookingId);
+            $stmt->bindParam(":payment_method_id", $bookingDetails["payment_method_id"]);
+            $stmt->bindParam(":total_amount", $bookingDetails["totalAmount"]);
+            $stmt->bindParam(":billing_vat", $bookingDetails["displayedVat"]);
+            $stmt->bindParam(":billing_balance", $bookingDetails["totalAmount"]);
+            $stmt->bindParam(":billing_downpayment", $bookingDetails["downpayment"]);
+            $stmt->execute();
+
             $conn->commit();
-            return 1; // Success
+            return 1;
         } catch (PDOException $e) {
             $conn->rollBack();
             return $e->getMessage();
@@ -441,26 +473,18 @@ class Demiren_customer
         $json = json_decode($json, true);
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
 
-        // $sql = "SELECT a.*, b.*, c.*, d.*
-        //             FROM tbl_booking a
-        //             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
-        //             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
-        //             LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-        //             WHERE 
-        //                 (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
-        //                 AND a.booking_id NOT IN (
-        //                     SELECT booking_id 
-        //                     FROM tbl_booking_history 
-        //                     WHERE booking_id = a.booking_id
-        //                 )
-        //             ORDER BY a.booking_created_at DESC
-        //         ";
         $sql = "SELECT a.*, b.*, c.*, d.*
                     FROM tbl_booking a
                     LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
                     LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
                     LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-                    WHERE a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId 
+                    WHERE 
+                        (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
+                        AND a.booking_id NOT IN (
+                            SELECT booking_id 
+                            FROM tbl_booking_history 
+                            WHERE booking_id = a.booking_id
+                        )
                     ORDER BY a.booking_created_at DESC
                 ";
 
@@ -603,12 +627,39 @@ class Demiren_customer
         include "connection.php";
         date_default_timezone_set('Asia/Manila');
         $json = json_decode($json, true);
-        $sql = "INSERT INTO tbl_booking_history (booking_id, status_id, updated_at) VALUES (:booking_id, 4, NOW())";
+
+        // 🔹 Get booking creation/check-in time
+        $sql = "SELECT booking_created_at 
+            FROM tbl_booking 
+            WHERE booking_id = :booking_id";
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(":booking_id", $json["booking_id"]);
         $stmt->execute();
+        $booking = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$booking) {
+            return 0; // booking not found
+        }
+
+        // 🔹 Compare current time with booking_created_at
+        $bookingTime = strtotime($booking["booking_created_at"]);
+        $currentTime = time();
+        $hoursDiff   = ($currentTime - $bookingTime) / 3600;
+
+        if ($hoursDiff >= 24) {
+            return -1; // ❌ Cannot cancel, booking is already 24+ hours old
+        }
+
+        // 🔹 Insert cancellation record
+        $sql = "INSERT INTO tbl_booking_history (booking_id, status_id, updated_at) 
+            VALUES (:booking_id, 3, NOW())"; // 3 = Cancelled (based on your tbl_booking_status)
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":booking_id", $json["booking_id"]);
+        $stmt->execute();
+
         return $stmt->rowCount() > 0 ? 1 : 0;
     }
+
 
     function sendEmail($json)
     {
@@ -904,6 +955,7 @@ class Demiren_customer
                 b.max_capacity,
                 b.roomtype_image,
                 a.room_status_id AS status_id,
+                b.roomtype_maxbeds,
                 COUNT(a.roomnumber_id) AS available_count,
                 MIN(a.roomnumber_id) AS sample_room_id
             FROM tbl_roomtype b
@@ -1042,7 +1094,29 @@ class Demiren_customer
                 $stmt->bindParam(":bookingRoom_adult", $room["adultCount"]);
                 $stmt->bindParam(":bookingRoom_children", $room["childrenCount"]);
                 $stmt->execute();
+                $bookingRoomId = $conn->lastInsertId();
+                if ($room["bedCount"] > 0) {
+                    $totalCharges = $room["bedCount"] * 400;
+                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total)
+                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total)";
+                    $stmt = $conn->prepare($sql);
+                    $stmt->bindParam(":booking_room_id", $bookingRoomId);
+                    $stmt->bindParam(":booking_charges_quantity", $room["bedCount"]);
+                    $stmt->bindParam(":booking_charges_total", $totalCharges);
+                    $stmt->execute();
+                }
             }
+            $balance = $bookingDetails["totalAmount"] - $bookingDetails["totalPay"];
+            $sql = "INSERT INTO tbl_billing(booking_id, payment_method_id, billing_total_amount, billing_dateandtime, billing_vat, billing_balance, billing_downpayment) 
+                VALUES (:booking_id, :payment_method_id, :total_amount, NOW(), :billing_vat, :billing_balance, :billing_downpayment)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":booking_id", $bookingId);
+            $stmt->bindParam(":payment_method_id", $bookingDetails["payment_method_id"]);
+            $stmt->bindParam(":total_amount", $bookingDetails["totalAmount"]);
+            $stmt->bindParam(":billing_vat", $bookingDetails["displayedVat"]);
+            $stmt->bindParam(":billing_balance", $balance);
+            $stmt->bindParam(":billing_downpayment", $bookingDetails["downpayment"]);
+            $stmt->execute();
 
             $conn->commit();
             return 1; // Success
@@ -1143,7 +1217,6 @@ class Demiren_customer
                 $stmt->execute();
             }
 
-            $conn->commit();
             return 1; // Success
         } catch (PDOException $e) {
             $conn->rollBack();
@@ -1358,7 +1431,7 @@ class Demiren_customer
         // {"username":"sabils","password":"sabils"}
         include "connection.php";
         $data = json_decode($json, true);
-        
+
         // First, try to find user in tbl_customers_online (Customer login)
         $sql = "SELECT a.customers_online_id, a.customers_online_password, b.*
         FROM tbl_customers_online a 
@@ -1424,7 +1497,7 @@ class Demiren_customer
                     $updateStmt = $conn->prepare($updateSql);
                     $updateStmt->bindParam(":employee_id", $employee["employee_id"]);
                     $updateStmt->execute();
-                    
+
                     // Remove password from returned data for security
                     unset($employee["employee_password"]);
                     return [
@@ -1441,7 +1514,7 @@ class Demiren_customer
                     $updateStmt = $conn->prepare($updateSql);
                     $updateStmt->bindParam(":employee_id", $employee["employee_id"]);
                     $updateStmt->execute();
-                    
+
                     // Remove password from returned data for security
                     unset($employee["employee_password"]);
                     return [
@@ -1472,9 +1545,6 @@ class Demiren_customer
             "message" => "Invalid username or password"
         ];
     }
-    
-
-// End of Upgraded Functions
 
     function employeeLogin($json)
     {
@@ -1490,33 +1560,34 @@ class Demiren_customer
 
     function getBookingSummary($json)
     {
+        // {"booking_customer_id": 1}
         include "connection.php";
         $json = json_decode($json, true);
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
         $today = date("Y-m-d");
 
         $sql = "SELECT a.*, b.*, c.*, d.*, 
-                f.booking_charges_id,
-                f.booking_charges_quantity,
-                f.booking_charges_price,
-                g.charges_master_id,
-                g.charges_master_status_id,
-                g.charges_master_name,
-                g.charges_master_price,
-                h.charges_category_id,
-                h.charges_category_name,
-                i.charges_status_name
-            FROM tbl_booking a
-            INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
-            INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
-            INNER JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
-            LEFT JOIN tbl_booking_charges f ON f.booking_room_id = b.booking_room_id
-            LEFT JOIN tbl_charges_master g ON g.charges_master_id = f.charges_master_id
-            LEFT JOIN tbl_charges_category h ON h.charges_category_id = g.charges_category_id
-            INNER JOIN tbl_charges_status i ON i.charges_status_id = g.charges_master_status_id
-            WHERE (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
-              AND DATE(:today) BETWEEN DATE(a.booking_checkin_dateandtime) AND DATE(a.booking_checkout_dateandtime)
-            ORDER BY a.booking_created_at DESC";
+               f.booking_charges_id,
+               f.booking_charges_quantity,
+               f.booking_charges_price,
+               g.charges_master_id,
+               g.charges_master_name,
+               g.charges_master_price,
+               h.charges_category_id,
+               h.charges_category_name,
+               IFNULL(i.charges_status_name, 'Pending') AS charges_status_name,
+               IFNULL(f.booking_charge_status, 1) AS booking_charge_status
+        FROM tbl_booking a
+        INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
+        INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
+        INNER JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
+        LEFT JOIN tbl_booking_charges f ON f.booking_room_id = b.booking_room_id
+        LEFT JOIN tbl_charges_master g ON g.charges_master_id = f.charges_master_id
+        LEFT JOIN tbl_charges_category h ON h.charges_category_id = g.charges_category_id
+        LEFT JOIN tbl_charges_status i ON i.charges_status_id = f.booking_charge_status
+        WHERE (a.customers_id = :bookingCustomerId OR a.customers_walk_in_id = :bookingCustomerId)
+          AND :today BETWEEN DATE(a.booking_checkin_dateandtime) AND DATE(a.booking_checkout_dateandtime)
+        ORDER BY a.booking_created_at DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':today', $today);
@@ -1524,8 +1595,6 @@ class Demiren_customer
         $stmt->execute();
 
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        file_put_contents('debug_rows.txt', print_r($rows, true));
 
         $bookings = [];
 
@@ -1573,7 +1642,10 @@ class Demiren_customer
                     "qty" => $row['booking_charges_quantity'],
                     "price" => $row['booking_charges_price'],
                     "category" => $row['charges_category_name'],
-                    "name" => $row['charges_master_name']
+                    "name" => $row['charges_master_name'],
+                    "status_id" => $row['booking_charge_status'],
+                    "status_name" => $row['charges_status_name'],
+                    "booking_charges_id" => $row['booking_charges_id']
                 ];
                 $bookings[$bookingId]['chargesTotal'] += $row['booking_charges_price'];
             }
@@ -1589,8 +1661,9 @@ class Demiren_customer
                             "charges_master_id" => $id,
                             "charges_master_name" => $c['name'],
                             "charges_category_name" => $c['category'],
-                            "charges_master_status_id" => $row['charges_master_status_id'],
-                            "charges_status_name" => $row['charges_status_name'],
+                            "charges_master_status_id" => $c['status_id'],
+                            "charges_status_name" => $c['status_name'],
+                            "booking_charges_id" => $c['booking_charges_id'],
                             "booking_charges_quantity" => 0,
                             "booking_charges_price" => 0,
                             "total" => 0
@@ -1605,14 +1678,14 @@ class Demiren_customer
                 unset($room['charges_raw']);
             }
             $booking['roomsList'] = array_values($booking['roomsList']);
+            // Optional recompute:
             // $booking['booking_totalAmount'] = $booking['roomsTotal'] + $booking['chargesTotal'];
         }
 
-        // // Debug bookings result
-        // file_put_contents('debug_bookings.txt', print_r($bookings, true));
-
         return array_values($bookings);
     }
+
+
 
     function checkAndSendOTP($json)
     {
@@ -1795,7 +1868,7 @@ class Demiren_customer
             return 1;
         } catch (PDOException $e) {
             $conn->rollBack();
-            return 0;
+            return $e;
         }
     }
 
@@ -1817,6 +1890,68 @@ class Demiren_customer
         $roomTypeImages = $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
         $roomTypeMaster["images"] = $roomTypeImages;
         return $roomTypeMaster;
+    }
+
+    function getPaymentMethod()
+    {
+        include "connection.php";
+        $sql = "SELECT * FROM tbl_payment_method";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+    }
+
+    function getCustomerLogs($json)
+    {
+        // {"customerId": 1}
+        include "connection.php";
+        $json = json_decode($json, true);
+        $customerId = $json['customerId'];
+        $sql = "SELECT * FROM tbl_activitylogs WHERE user_type = 'customer' AND user_id = :customerId";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':customerId', $customerId);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+    }
+
+    function cancelReqAmenities($json)
+    {
+        include "connection.php";
+        date_default_timezone_set('Asia/Manila');
+        $data = json_decode($json, true);
+
+        // 🔹 Step 1: Get the request date/time
+        $sql = "SELECT booking_charge_date 
+            FROM tbl_booking_charges 
+            WHERE booking_charges_id = :bookingChargesId";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":bookingChargesId", $data["bookingChargesId"]);
+        $stmt->execute();
+        $charge = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$charge) {
+            return 0; // ❌ Request not found
+        }
+
+        // 🔹 Step 2: Check if more than 10 minutes have passed
+        $requestTime = strtotime($charge["booking_charge_date"]);
+        $currentTime = time();
+        $minutesDiff = ($currentTime - $requestTime) / 60;
+
+        if ($minutesDiff > 10) {
+            // ❌ Too late to cancel
+            return -1;
+        }
+
+        // 🔹 Step 3: Proceed with cancellation
+        $sql = "UPDATE tbl_booking_charges 
+            SET booking_charge_status = 3 
+            WHERE booking_charges_id = :bookingChargesId";
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":bookingChargesId", $data["bookingChargesId"]);
+        $stmt->execute();
+
+        return $stmt->rowCount() > 0 ? 1 : 0;
     }
 } //customer
 
@@ -1908,12 +2043,9 @@ switch ($operation) {
     case "removeBookingRoom":
         echo json_encode($demiren_customer->removeBookingRoom($json));
         break;
-        
     case "login":
         echo json_encode($demiren_customer->login($json));
         break;
-    
-
     case "getBookingSummary":
         echo json_encode($demiren_customer->getBookingSummary($json));
         break;
@@ -1928,6 +2060,15 @@ switch ($operation) {
         break;
     case "getRoomTypeDetails";
         echo json_encode($demiren_customer->getRoomTypeDetails($json));
+        break;
+    case "getPaymentMethod":
+        echo json_encode($demiren_customer->getPaymentMethod());
+        break;
+    case "getCustomerLogs":
+        echo json_encode($demiren_customer->getCustomerLogs($json));
+        break;
+    case "cancelReqAmenities":
+        echo json_encode($demiren_customer->cancelReqAmenities($json));
         break;
     default:
         echo json_encode(["error" => "Invalid operation"]);
