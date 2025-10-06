@@ -365,13 +365,27 @@ class Demiren_customer
                 $stmt->bindParam(":bookingRoom_adult", $room["adultCount"]);
                 $stmt->bindParam(":bookingRoom_children", $room["childrenCount"]);
                 $stmt->execute();
+                // capture the just-inserted booking_room_id
+                $bookingRoomId = $conn->lastInsertId();
                 if ($room["bedCount"] > 0) {
-                    $bookingId = $conn->lastInsertId();
                     $totalCharges = $room["bedCount"] * 400;
-                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total)
-                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total)";
+                    $sql = "INSERT INTO tbl_booking_charges(
+                                charges_master_id,
+                                booking_room_id,
+                                booking_charges_price,
+                                booking_charges_quantity,
+                                booking_charges_total,
+                                charges_status_id
+                            ) VALUES (
+                                2,
+                                :booking_room_id,
+                                400,
+                                :booking_charges_quantity,
+                                :booking_charges_total,
+                                1
+                            )"; // 1 = Pending per tbl_charges_status
                     $stmt = $conn->prepare($sql);
-                    $stmt->bindParam(":booking_room_id", $bookingId);
+                    $stmt->bindParam(":booking_room_id", $bookingRoomId);
                     $stmt->bindParam(":booking_charges_quantity", $room["bedCount"]);
                     $stmt->bindParam(":booking_charges_total", $totalCharges);
                     $stmt->execute();
@@ -396,6 +410,96 @@ class Demiren_customer
             $stmt->execute();
 
             $conn->commit();
+            
+            // ✅ Step 6: Send email notification to customer
+            try {
+                include_once 'send_email.php';
+                $emailSender = new SendEmail();
+                
+                // Prepare email content
+                $customerName = $json["walkinfirstname"] . " " . $json["walkinlastname"];
+                $customerEmail = $json["email"];
+                
+                $emailSubject = "Booking Confirmation - Reference #" . $referenceNo;
+                
+                $emailBody = "
+                <html>
+                <head>
+                    <style>
+                        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+                        .header { background-color: #113F67; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+                        .content { background-color: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px; }
+                        .booking-details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #113F67; }
+                        .status-pending { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 5px; margin: 15px 0; }
+                        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+                        .highlight { color: #113F67; font-weight: bold; }
+                    </style>
+                </head>
+                <body>
+                    <div class='container'>
+                        <div class='header'>
+                            <h1>🏨 Demiren Hotel & Restaurant</h1>
+                            <p>Booking Confirmation</p>
+                        </div>
+                        
+                        <div class='content'>
+                            <p>Dear <strong>" . htmlspecialchars($customerName) . "</strong>,</p>
+                            
+                            <p>Thank you for choosing Demiren Hotel & Restaurant for your upcoming stay!</p>
+                            
+                            <div class='booking-details'>
+                                <h3>📋 Booking Details</h3>
+                                <p><strong>Reference Number:</strong> <span class='highlight'>" . $referenceNo . "</span></p>
+                                <p><strong>Check-in Date:</strong> " . date('F j, Y', strtotime($checkIn)) . "</p>
+                                <p><strong>Check-out Date:</strong> " . date('F j, Y', strtotime($checkOut)) . "</p>
+                                <p><strong>Total Guests:</strong> " . $totalGuests . "</p>
+                                <p><strong>Total Amount:</strong> ₱" . number_format($bookingDetails["totalAmount"], 2) . "</p>
+                                <p><strong>Down Payment:</strong> ₱" . number_format($bookingDetails["downpayment"], 2) . "</p>
+                            </div>
+                            
+                            <div class='status-pending'>
+                                <h4>⏳ Booking Status: Pending Approval</h4>
+                                <p>Your booking request has been received and is currently being reviewed by our team.</p>
+                                <p><strong>Please wait for our confirmation email</strong> which will be sent within 24 hours.</p>
+                            </div>
+                            
+                            <h4>📞 Contact Information</h4>
+                            <p>If you have any questions or need to make changes to your booking, please contact us:</p>
+                            <ul>
+                                <li>📧 Email: reservations@demirenhotel.com</li>
+                                <li>📞 Phone: (02) 123-4567</li>
+                                <li>🏨 Address: Demiren Hotel & Restaurant</li>
+                            </ul>
+                            
+                            <p>We look forward to welcoming you to Demiren Hotel & Restaurant!</p>
+                            
+                            <p>Best regards,<br>
+                            <strong>Demiren Hotel & Restaurant Team</strong></p>
+                        </div>
+                        
+                        <div class='footer'>
+                            <p>This is an automated message. Please do not reply to this email.</p>
+                            <p>© 2024 Demiren Hotel & Restaurant. All rights reserved.</p>
+                        </div>
+                    </div>
+                </body>
+                </html>";
+                
+                // Send the email
+                $emailSent = $emailSender->sendEmail($customerEmail, $emailSubject, $emailBody);
+                
+                if ($emailSent) {
+                    error_log("Booking confirmation email sent successfully to: " . $customerEmail . " for booking: " . $referenceNo);
+                } else {
+                    error_log("Failed to send booking confirmation email to: " . $customerEmail . " for booking: " . $referenceNo);
+                }
+                
+            } catch (Exception $emailError) {
+                // Log email error but don't fail the booking process
+                error_log("Email notification error for booking " . $referenceNo . ": " . $emailError->getMessage());
+            }
+            
             return 1;
         } catch (PDOException $e) {
             $conn->rollBack();
