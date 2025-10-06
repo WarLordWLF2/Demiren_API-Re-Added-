@@ -21,11 +21,12 @@ class SendEmail
             $mail->isSMTP();                                        // Send using SMTP
             $mail->Host       = 'smtp.gmail.com';                   // Set the SMTP server to send through
             $mail->SMTPAuth   = true;                               // Enable SMTP authentication
-            $mail->Username   = 'ikversoza@gmail.com';     // SMTP username
+            $mail->Username   = 'ikversoza@gmail.com';              // SMTP username
             $mail->Password   = 'izpfukocrjngaogg';                 // SMTP password (App Password)
-            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;        // Enable implicit TLS encryption
-            $mail->Port       = 465;                                // TCP port to connect to; use 587 if you have set `SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS`
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;     // Enable TLS encryption
+            $mail->Port       = 587;                                // TCP port to connect to; use 587 for STARTTLS
             $mail->Timeout    = 30;                                 // Set timeout to 30 seconds
+            $mail->CharSet    = 'UTF-8';                            // Set character encoding
 
             // Recipients
             $mail->setFrom('ikversoza@gmail.com', 'Demiren Hotel');

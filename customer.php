@@ -1784,9 +1784,12 @@ class Demiren_customer
                     "message" => "OTP sent successfully to your email."
                 ]);
             } else {
-                // Log failed OTP sending
+                // Log failed OTP sending with more details
                 error_log("Failed to send OTP to: " . $emailTo);
                 error_log("Email result: " . print_r($emailResult, true));
+                error_log("OTP code: " . $otp);
+                error_log("Email subject: " . $emailSubject);
+                
                 return json_encode([
                     "success" => false,
                     "message" => "Failed to send OTP email. Please check your email address and try again."
@@ -2049,7 +2052,7 @@ switch ($operation) {
     case "getBookingSummary":
         echo json_encode($demiren_customer->getBookingSummary($json));
         break;
-    case "checkAndSendOTP";
+    case "checkAndSendOTP":
         echo $demiren_customer->checkAndSendOTP($json);
         break;
     case "getAmenitiesMaster":
@@ -2058,7 +2061,7 @@ switch ($operation) {
     case "addBookingCharges":
         echo json_encode($demiren_customer->addBookingCharges($json));
         break;
-    case "getRoomTypeDetails";
+    case "getRoomTypeDetails":
         echo json_encode($demiren_customer->getRoomTypeDetails($json));
         break;
     case "getPaymentMethod":
