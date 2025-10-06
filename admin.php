@@ -250,6 +250,132 @@ class Admin_Functions
         }
     }
 
+    // NEW API: Enhanced booking list with real-time balance calculation
+    function viewBookingListEnhanced()
+    {
+        include 'connection.php';
+
+        try {
+            $sql = "SELECT 
+                        b.booking_id,
+                        b.reference_no,
+                        b.booking_checkin_dateandtime,
+                        b.booking_checkout_dateandtime,
+                        b.booking_created_at,
+                        -- Customer core
+                        COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                                 CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+                        COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+                        COALESCE(c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
+                        n.nationality_name AS nationality,
+                        -- Rooms
+                        GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS room_numbers,
+                        -- Latest status
+                        COALESCE(bs.booking_status_name, 'Pending') AS booking_status,
+                        -- Enhanced balance calculation
+                        CASE 
+                            WHEN latest_billing.billing_id IS NOT NULL THEN
+                                -- Use billing data if available
+                                CASE 
+                                    WHEN latest_invoice.invoice_status_id = 1 THEN 0  -- Invoice complete = fully paid
+                                    ELSE COALESCE(latest_billing.billing_balance, 0)
+                                END
+                            ELSE 
+                                -- No billing record, calculate from booking data
+                                COALESCE(b.booking_totalAmount, 0) - COALESCE(b.booking_downpayment, 0)
+                        END AS balance,
+                        -- Enhanced amounts
+                        CASE 
+                            WHEN latest_billing.billing_id IS NOT NULL THEN
+                                COALESCE(latest_billing.billing_total_amount, b.booking_totalAmount)
+                            ELSE b.booking_totalAmount
+                        END AS total_amount,
+                        CASE 
+                            WHEN latest_billing.billing_id IS NOT NULL THEN
+                                COALESCE(latest_billing.billing_downpayment, b.booking_downpayment)
+                            ELSE b.booking_downpayment
+                        END AS downpayment,
+                        CASE 
+                            WHEN latest_billing.billing_id IS NOT NULL THEN
+                                COALESCE(latest_billing.billing_vat, 0)
+                            ELSE 0
+                        END AS vat,
+                        -- Additional info
+                        latest_billing.billing_id,
+                        latest_invoice.invoice_id,
+                        latest_invoice.invoice_status_id,
+                        CASE 
+                            WHEN latest_invoice.invoice_status_id = 1 THEN 'Complete'
+                            WHEN latest_invoice.invoice_status_id = 2 THEN 'Incomplete'
+                            WHEN latest_billing.billing_id IS NOT NULL THEN 'Billed'
+                            ELSE 'Not Billed'
+                        END AS billing_status
+                    FROM tbl_booking b
+                    LEFT JOIN tbl_customers c 
+                        ON b.customers_id = c.customers_id
+                    LEFT JOIN tbl_customers_walk_in w 
+                        ON b.customers_walk_in_id = w.customers_walk_in_id
+                    LEFT JOIN tbl_nationality n 
+                        ON c.nationality_id = n.nationality_id
+                    LEFT JOIN tbl_booking_room br 
+                        ON b.booking_id = br.booking_id
+                    LEFT JOIN (
+                        SELECT bh1.booking_id, bs.booking_status_name
+                        FROM tbl_booking_history bh1
+                        INNER JOIN (
+                            SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                            FROM tbl_booking_history
+                            GROUP BY booking_id
+                        ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                        INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+                    ) bs ON bs.booking_id = b.booking_id
+                    LEFT JOIN (
+                        -- Get the latest billing record for each booking
+                        SELECT 
+                            bi.booking_id,
+                            bi.billing_id,
+                            bi.billing_total_amount,
+                            bi.billing_downpayment,
+                            bi.billing_balance,
+                            bi.billing_vat,
+                            bi.billing_dateandtime
+                        FROM tbl_billing bi
+                        INNER JOIN (
+                            SELECT booking_id, MAX(billing_id) as max_billing_id
+                            FROM tbl_billing
+                            GROUP BY booking_id
+                        ) latest ON latest.booking_id = bi.booking_id AND latest.max_billing_id = bi.billing_id
+                    ) latest_billing ON latest_billing.booking_id = b.booking_id
+                    LEFT JOIN (
+                        -- Get the latest invoice for each billing record
+                        SELECT 
+                            i.billing_id,
+                            i.invoice_id,
+                            i.invoice_status_id,
+                            i.invoice_total_amount,
+                            i.invoice_date,
+                            i.invoice_time
+                        FROM tbl_invoice i
+                        INNER JOIN (
+                            SELECT billing_id, MAX(invoice_id) as max_invoice_id
+                            FROM tbl_invoice
+                            GROUP BY billing_id
+                        ) latest_inv ON latest_inv.billing_id = i.billing_id AND latest_inv.max_invoice_id = i.invoice_id
+                    ) latest_invoice ON latest_invoice.billing_id = latest_billing.billing_id
+                    GROUP BY b.booking_id
+                    ORDER BY b.booking_created_at DESC";
+            
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            unset($conn, $stmt);
+            return !empty($result) ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
     function changeBookingStatus($data)
     {
         include 'connection.php';
@@ -4004,6 +4130,10 @@ switch ($methodType) {
     // For Bookings Management
     case "viewBookings":
         echo $AdminClass->viewBookingList();
+        break;
+
+    case "viewBookingsEnhanced":
+        echo $AdminClass->viewBookingListEnhanced();
         break;
 
     case "changeCustomerRoomsNumber":
