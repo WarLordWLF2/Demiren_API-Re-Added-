@@ -811,6 +811,38 @@ class Transactions
         }
     }
 
+    function getBookingBillingId($json)
+    {
+        include "connection.php";
+        $json = json_decode($json, true);
+        $booking_id = $json["booking_id"];
+
+        try {
+            $stmt = $conn->prepare("SELECT billing_id FROM tbl_billing WHERE booking_id = :booking_id ORDER BY billing_id DESC LIMIT 1");
+            $stmt->bindParam(':booking_id', $booking_id);
+            $stmt->execute();
+            
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($result) {
+                echo json_encode([
+                    "success" => true,
+                    "billing_id" => $result['billing_id']
+                ]);
+            } else {
+                echo json_encode([
+                    "success" => false,
+                    "message" => "No billing record found for this booking"
+                ]);
+            }
+        } catch (Exception $e) {
+            echo json_encode([
+                "success" => false,
+                "message" => "Error: " . $e->getMessage()
+            ]);
+        }
+    }
+
     function getBookingCharges($json)
     {
         include "connection.php";
@@ -1315,6 +1347,9 @@ switch ($operation) {
         break;
     case "getDetailedBookingCharges":
         $transactions->getDetailedBookingCharges($json);
+        break;
+    case "getBookingBillingId":
+        $transactions->getBookingBillingId($json);
         break;
     default:
         echo "Invalid Operation";

@@ -204,7 +204,11 @@ class Admin_Functions
                         -- Rooms
                         GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS room_numbers,
                         -- Latest status
-                        COALESCE(bs.booking_status_name, 'Pending') AS booking_status,
+                        CASE 
+                            WHEN (bs.booking_status_name IS NULL OR bs.booking_status_name = 'Pending') 
+                                 AND b.booking_checkout_dateandtime < NOW() THEN 'Checked-Out'
+                            ELSE COALESCE(bs.booking_status_name, 'Pending')
+                        END AS booking_status,
                         -- Amounts
                         COALESCE(bill.billing_total_amount, b.booking_totalAmount) AS total_amount,
                         COALESCE(bill.billing_downpayment, b.booking_downpayment) AS downpayment
@@ -3202,12 +3206,47 @@ class Admin_Functions
         }
     }
 
+    // Change employee active/inactive status
+    function change_EmployeeStatus($data)
+    {
+        include "connection.php";
+        try {
+            if (empty($data['employee_id']) || !isset($data['employee_status'])) {
+                return array(
+                    "status" => "error",
+                    "message" => "Employee ID and status are required"
+                );
+            }
+
+            $employee_id = intval($data['employee_id']);
+            $employee_status = intval($data['employee_status']) === 1 ? 1 : 0;
+
+            $sql = "UPDATE tbl_employee 
+                    SET employee_status = :employee_status, employee_updated_at = NOW()
+                    WHERE employee_id = :employee_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':employee_status', $employee_status, PDO::PARAM_INT);
+            $stmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+            $stmt->execute();
+
+            return array(
+                "status" => "success",
+                "message" => $employee_status === 1 ? "Employee activated successfully" : "Employee deactivated successfully"
+            );
+        } catch (Exception $e) {
+            return array(
+                "status" => "error",
+                "message" => "Error updating employee status: " . $e->getMessage()
+            );
+        }
+    }
+
     function add_NewEmployee($data)
     {
         include "connection.php";
         try {
             // Validate required fields
-            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_password', 'employee_address', 'employee_birthdate', 'employee_gender', 'employee_user_level_id'];
+            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_password', 'employee_address', 'employee_birthdate', 'employee_gender'];
             foreach ($required_fields as $field) {
                 if (empty($data[$field])) {
                     throw new Exception("Field '$field' is required");
@@ -3229,10 +3268,9 @@ class Admin_Functions
             $hashed_password = password_hash($data['employee_password'], PASSWORD_DEFAULT);
 
             $sql = "INSERT INTO tbl_employee (employee_user_level_id, employee_fname, employee_lname, employee_username, employee_phone, employee_email, employee_password, employee_address, employee_birthdate, employee_gender, employee_created_at, employee_updated_at, employee_status) 
-                    VALUES (:user_level_id, :fname, :lname, :username, :phone, :email, :password, :address, :birthdate, :gender, NOW(), NOW(), 'Active')";
+                    VALUES (2, :fname, :lname, :username, :phone, :email, :password, :address, :birthdate, :gender, NOW(), NOW(), 1)";
 
             $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':user_level_id', $data['employee_user_level_id']);
             $stmt->bindParam(':fname', $data['employee_fname']);
             $stmt->bindParam(':lname', $data['employee_lname']);
             $stmt->bindParam(':username', $data['employee_username']);
@@ -3269,7 +3307,7 @@ class Admin_Functions
                 throw new Exception("Employee ID is required");
             }
 
-            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_address', 'employee_birthdate', 'employee_gender', 'employee_user_level_id'];
+            $required_fields = ['employee_fname', 'employee_lname', 'employee_username', 'employee_phone', 'employee_email', 'employee_address', 'employee_birthdate', 'employee_gender'];
             foreach ($required_fields as $field) {
                 if (empty($data[$field])) {
                     throw new Exception("Field '$field' is required");
@@ -3288,9 +3326,8 @@ class Admin_Functions
                 throw new Exception("Username or email already exists");
             }
 
-            // Build update query
+            // Build update query (user level cannot be changed via API)
             $sql = "UPDATE tbl_employee SET 
-                    employee_user_level_id = :user_level_id,
                     employee_fname = :fname,
                     employee_lname = :lname,
                     employee_username = :username,
@@ -3310,7 +3347,6 @@ class Admin_Functions
             $sql .= " WHERE employee_id = :employee_id";
 
             $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':user_level_id', $data['employee_user_level_id']);
             $stmt->bindParam(':fname', $data['employee_fname']);
             $stmt->bindParam(':lname', $data['employee_lname']);
             $stmt->bindParam(':username', $data['employee_username']);
@@ -3349,8 +3385,8 @@ class Admin_Functions
                 throw new Exception("Employee ID is required");
             }
 
-            // Instead of deleting, we'll deactivate the employee
-            $sql = "UPDATE tbl_employee SET employee_status = 'Inactive', employee_updated_at = NOW() WHERE employee_id = :employee_id";
+            // Soft-delete: set employee_status to 0 (inactive)
+            $sql = "UPDATE tbl_employee SET employee_status = 0, employee_updated_at = NOW() WHERE employee_id = :employee_id";
             $stmt = $conn->prepare($sql);
             $stmt->bindParam(':employee_id', $data['employee_id']);
 
@@ -3454,16 +3490,41 @@ class Admin_Functions
 
             // Check if password is being changed
             if (isset($data["new_password"]) && !empty($data["new_password"])) {
-                $currentPassword = $data["current_password"];
-                $storedPassword = $currentEmployee["employee_password"];
+                $currentPassword = $data["current_password"] ?? "";
+                $newPassword = $data["new_password"];
+                $confirmPassword = $data["confirm_password"] ?? null;
+                $storedPassword = $currentEmployee["employee_password"]; // hashed (bcrypt) per DB structure
 
-                // Verify current password
-                if (password_get_info($storedPassword)['algo'] !== null) {
-                    // Password is hashed, use password_verify
+                // Require current password when changing password
+                if (empty($currentPassword)) {
+                    return [
+                        "status" => "error",
+                        "message" => "Current password is required to change your password"
+                    ];
+                }
+
+                // Optional server-side confirmation check
+                if ($confirmPassword !== null && $confirmPassword !== $newPassword) {
+                    return [
+                        "status" => "error",
+                        "message" => "New password and confirm password do not match"
+                    ];
+                }
+
+                // Verify current password against stored encrypted (hashed) password
+                if (password_get_info($storedPassword)['algo'] !== 0) {
+                    // Password is hashed (e.g., bcrypt), use password_verify
                     if (!password_verify($currentPassword, $storedPassword)) {
                         return [
                             "status" => "error",
                             "message" => "Current password is incorrect"
+                        ];
+                    }
+                    // Prevent setting the same password
+                    if (password_verify($newPassword, $storedPassword)) {
+                        return [
+                            "status" => "error",
+                            "message" => "New password must be different from current password"
                         ];
                     }
                 } else {
@@ -3472,6 +3533,12 @@ class Admin_Functions
                         return [
                             "status" => "error",
                             "message" => "Current password is incorrect"
+                        ];
+                    }
+                    if ($newPassword === $storedPassword) {
+                        return [
+                            "status" => "error",
+                            "message" => "New password must be different from current password"
                         ];
                     }
                 }
@@ -3552,9 +3619,9 @@ class Admin_Functions
                 $params[":employee_gender"] = $data["employee_gender"];
             }
 
-            // Handle password update
+            // Handle password update: ALWAYS encrypt (hash) the new password before storing
             if (isset($data["new_password"]) && !empty($data["new_password"])) {
-                $hashedPassword = password_hash($data["new_password"], PASSWORD_DEFAULT);
+                $hashedPassword = password_hash($data["new_password"], PASSWORD_BCRYPT);
                 $updateFields[] = "employee_password = :employee_password";
                 $params[":employee_password"] = $hashedPassword;
             }
@@ -4088,6 +4155,217 @@ class Admin_Functions
             ];
         }
     }
+
+    function autoCheckoutAndSeedBillings()
+    {
+        include 'connection.php';
+        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+        try {
+            $conn->beginTransaction();
+
+            // Auto mark past-due Pending bookings as Checked-Out (status_id = 6)
+            $sqlPending = "SELECT b.booking_id
+                            FROM tbl_booking b
+                            LEFT JOIN (
+                                SELECT bh.booking_id, bs.booking_status_name
+                                FROM tbl_booking_history bh
+                                INNER JOIN tbl_booking_status bs ON bh.status_id = bs.booking_status_id
+                                WHERE bh.booking_history_id IN (
+                                    SELECT MAX(booking_history_id)
+                                    FROM tbl_booking_history
+                                    GROUP BY booking_id
+                                )
+                            ) st ON st.booking_id = b.booking_id
+                            WHERE COALESCE(st.booking_status_name, 'Pending') = 'Pending'
+                              AND b.booking_checkout_dateandtime < NOW()";
+            $stmt = $conn->prepare($sqlPending);
+            $stmt->execute();
+            $pastDue = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            foreach ($pastDue as $bid) {
+                // insert booking history Checked-Out
+                $ins = $conn->prepare("INSERT INTO tbl_booking_history (booking_id, status_id, booking_history_dateandtime, employee_id)
+                                        VALUES (:bid, 6, NOW(), 1)");
+                $ins->execute([':bid' => $bid]);
+
+                // set rooms to Dirty (5)
+                $rooms = $conn->prepare("SELECT roomnumber_id FROM tbl_booking_room WHERE booking_id = :bid");
+                $rooms->execute([':bid' => $bid]);
+                $roomIds = $rooms->fetchAll(PDO::FETCH_COLUMN);
+                if (!empty($roomIds)) {
+                    $inList = implode(',', array_map('intval', $roomIds));
+                    $upd = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 5 WHERE roomnumber_id IN ($inList)");
+                    $upd->execute();
+                }
+            }
+
+            // Seed billings for bookings without billing
+            $sqlNoBill = "SELECT b.booking_id
+                          FROM tbl_booking b
+                          LEFT JOIN tbl_billing bi ON bi.booking_id = b.booking_id
+                          WHERE bi.billing_id IS NULL";
+            $stmt2 = $conn->prepare($sqlNoBill);
+            $stmt2->execute();
+            $toBill = $stmt2->fetchAll(PDO::FETCH_COLUMN);
+
+            foreach ($toBill as $bid) {
+                $bk = $conn->prepare("SELECT booking_totalAmount, booking_downpayment FROM tbl_booking WHERE booking_id = :bid");
+                $bk->execute([':bid' => $bid]);
+                $row = $bk->fetch(PDO::FETCH_ASSOC);
+                if (!$row) continue;
+
+                $invoiceNumber = 'INV-' . date('YmdHis') . '-' . $bid;
+                $insBill = $conn->prepare("INSERT INTO tbl_billing (
+                        booking_id, employee_id, payment_method_id, discounts_id, billing_dateandtime,
+                        billing_invoice_number, billing_downpayment, billing_vat, billing_total_amount, billing_balance
+                    ) VALUES (
+                        :bid, 1, 1, NULL, NOW(), :inv, :down, :vat, :total, :bal
+                    )");
+                $vat = round($row['booking_totalAmount'] * 0.12, 2);
+                $down = (float)$row['booking_downpayment'];
+                $total = (float)$row['booking_totalAmount'] + $vat;
+                $bal = max(0, $total - $down);
+                $insBill->execute([
+                    ':bid' => $bid,
+                    ':inv' => $invoiceNumber,
+                    ':down' => $down,
+                    ':vat' => $vat,
+                    ':total' => $total,
+                    ':bal' => $bal
+                ]);
+            }
+
+            $conn->commit();
+            return json_encode(['status' => 'success', 'updated' => count($pastDue), 'billed' => count($toBill)]);
+        } catch (Exception $e) {
+            $conn->rollBack();
+            return json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        }
+    }
+
+        // Check if booking has a complete invoice
+    function checkInvoiceStatus($data)
+    {
+        include "connection.php";
+
+        $reference_no = $data['reference_no'];
+
+        // Check if there's an invoice with matching reference number and complete status
+        $sql = "SELECT i.invoice_id, i.invoice_status_id, b.billing_invoice_number
+                FROM tbl_invoice i
+                JOIN tbl_billing b ON i.billing_id = b.billing_id
+                JOIN tbl_booking bk ON b.booking_id = bk.booking_id
+                WHERE bk.reference_no = :reference_no 
+                AND i.invoice_status_id = 1";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(":reference_no", $reference_no);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        $hasCompleteInvoice = $result !== false;
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        return json_encode([
+            'success' => true,
+            'has_complete_invoice' => $hasCompleteInvoice,
+            'invoice_data' => $result
+        ]);
+    }
+
+    // Get customer invoice data by reference number
+    function getCustomerInvoice($data)
+    {
+        include "connection.php";
+
+        $reference_no = $data['reference_no'];
+
+        $query = "SELECT 
+            a.booking_id,
+            a.reference_no,
+            CONCAT(b.customers_fname, ' ', b.customers_lname) AS customer_name,
+            c.billing_id,
+            c.billing_total_amount,
+            c.billing_balance,
+            c.billing_downpayment,
+            d.invoice_id,
+            d.invoice_date,
+            d.invoice_time,
+            d.invoice_total_amount,
+            d.invoice_status_id,
+            e.payment_method_name,
+            f.employee_fname
+        FROM tbl_booking a
+        LEFT JOIN tbl_customers b ON a.customers_id = b.customers_id
+        LEFT JOIN tbl_billing c ON a.booking_id = c.booking_id
+        LEFT JOIN tbl_invoice d ON c.billing_id = d.billing_id
+        LEFT JOIN tbl_payment_method e ON d.payment_method_id = e.payment_method_id
+        LEFT JOIN tbl_employee f ON d.employee_id = f.employee_id
+        WHERE a.reference_no = :reference_no
+        LIMIT 1";
+
+        $stmt = $conn->prepare($query);
+        $stmt->bindParam(":reference_no", $reference_no, PDO::PARAM_STR);
+        $stmt->execute();
+        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        if ($invoice && $invoice['invoice_id']) {
+            return json_encode(["success" => true, "invoice_data" => $invoice]);
+        } else {
+            return json_encode(["success" => false, "message" => "No invoice found"]);
+        }
+    }
+
+    // Get customer billing data by reference number
+    function getCustomerBilling($data)
+    {
+        include 'connection.php';
+
+        $reference_no = $data['reference_no'];
+
+        $sql = "SELECT 
+                a.billing_id,
+                a.booking_id,
+                a.billing_total_amount,
+                a.billing_balance,
+                a.billing_downpayment,
+                a.billing_created_at,
+                b.reference_no
+            FROM tbl_billing a
+            INNER JOIN tbl_booking b ON a.booking_id = b.booking_id
+            WHERE b.reference_no = :reference_no
+            ORDER BY a.billing_created_at DESC";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':reference_no', $reference_no);
+        $stmt->execute();
+
+        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        unset($stmt, $conn);
+
+        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+        if (ob_get_length()) {
+            ob_clean();
+        }
+
+        return json_encode(["success" => true, "billing_data" => $result]);
+    }
+
 }
 
 
@@ -4119,6 +4397,10 @@ switch ($methodType) {
 
     case "getBookingsWithBillingStatus":
         echo $AdminClass->getBookingsWithBillingStatus();
+        break;
+
+    case "autoCheckoutAndSeedBillings":
+        echo $AdminClass->autoCheckoutAndSeedBillings();
         break;
 
     case "requestCustomerRooms":
@@ -4173,15 +4455,15 @@ switch ($methodType) {
         break;
 
     case "getCustomerInvoice":
-        echo getCustomerInvoice($jsonData);
+        echo $AdminClass->getCustomerInvoice($jsonData);
         break;
 
     case "checkInvoiceStatus":
-        echo checkInvoiceStatus($jsonData);
+        echo $AdminClass->checkInvoiceStatus($jsonData);
         break;
 
     case "getCustomerBilling":
-        echo getCustomerBilling($jsonData);
+        echo $AdminClass->getCustomerBilling($jsonData);
         break;
 
     case "requestCustomerRooms":
@@ -4398,6 +4680,10 @@ switch ($methodType) {
         echo json_encode($AdminClass->remove_Employee($jsonData));
         break;
 
+    case "changeEmployeeStatus":
+        echo json_encode($AdminClass->change_EmployeeStatus($jsonData));
+        break;
+
     case "getUserLevels":
         echo json_encode($AdminClass->getUserLevels());
         break;
@@ -4436,128 +4722,6 @@ switch ($methodType) {
         break;
 }
 
-
-    // Check if booking has a complete invoice
-    function checkInvoiceStatus($data)
-    {
-        include "connection.php";
-
-        $reference_no = $data['reference_no'];
-
-        // Check if there's an invoice with matching reference number and complete status
-        $sql = "SELECT i.invoice_id, i.invoice_status_id, b.billing_invoice_number
-                FROM tbl_invoice i
-                JOIN tbl_billing b ON i.billing_id = b.billing_id
-                JOIN tbl_booking bk ON b.booking_id = bk.booking_id
-                WHERE bk.reference_no = :reference_no 
-                AND i.invoice_status_id = 1";
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bindParam(":reference_no", $reference_no);
-        $stmt->execute();
-
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        $hasCompleteInvoice = $result !== false;
-
-        unset($stmt, $conn);
-
-        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
-        if (ob_get_length()) {
-            ob_clean();
-        }
-
-        return json_encode([
-            'success' => true,
-            'has_complete_invoice' => $hasCompleteInvoice,
-            'invoice_data' => $result
-        ]);
-    }
-
-    // Get customer invoice data by reference number
-    function getCustomerInvoice($data)
-    {
-        include "connection.php";
-
-        $reference_no = $data['reference_no'];
-
-        $query = "SELECT 
-            a.booking_id,
-            a.reference_no,
-            CONCAT(b.customers_fname, ' ', b.customers_lname) AS customer_name,
-            c.billing_id,
-            c.billing_total_amount,
-            c.billing_balance,
-            c.billing_downpayment,
-            d.invoice_id,
-            d.invoice_date,
-            d.invoice_time,
-            d.invoice_total_amount,
-            d.invoice_status_id,
-            e.payment_method_name,
-            f.employee_fname
-        FROM tbl_booking a
-        LEFT JOIN tbl_customers b ON a.customers_id = b.customers_id
-        LEFT JOIN tbl_billing c ON a.booking_id = c.booking_id
-        LEFT JOIN tbl_invoice d ON c.billing_id = d.billing_id
-        LEFT JOIN tbl_payment_method e ON d.payment_method_id = e.payment_method_id
-        LEFT JOIN tbl_employee f ON d.employee_id = f.employee_id
-        WHERE a.reference_no = :reference_no
-        LIMIT 1";
-
-        $stmt = $conn->prepare($query);
-        $stmt->bindParam(":reference_no", $reference_no, PDO::PARAM_STR);
-        $stmt->execute();
-        $invoice = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        unset($stmt, $conn);
-
-        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
-        if (ob_get_length()) {
-            ob_clean();
-        }
-
-        if ($invoice && $invoice['invoice_id']) {
-            return json_encode(["success" => true, "invoice_data" => $invoice]);
-        } else {
-            return json_encode(["success" => false, "message" => "No invoice found"]);
-        }
-    }
-
-    // Get customer billing data by reference number
-    function getCustomerBilling($data)
-    {
-        include 'connection.php';
-
-        $reference_no = $data['reference_no'];
-
-        $sql = "SELECT 
-                a.billing_id,
-                a.booking_id,
-                a.billing_total_amount,
-                a.billing_balance,
-                a.billing_downpayment,
-                a.billing_created_at,
-                b.reference_no
-            FROM tbl_billing a
-            INNER JOIN tbl_booking b ON a.booking_id = b.booking_id
-            WHERE b.reference_no = :reference_no
-            ORDER BY a.billing_created_at DESC";
-
-        $stmt = $conn->prepare($sql);
-        $stmt->bindParam(':reference_no', $reference_no);
-        $stmt->execute();
-
-        $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        unset($stmt, $conn);
-
-        // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
-        if (ob_get_length()) {
-            ob_clean();
-        }
-
-        return json_encode(["success" => true, "billing_data" => $result]);
-    }
 
 // Needs fixing/update
 // 1. approveCustomerBooking and declineCustomerBooking need to upgrade their way of calling status

@@ -157,7 +157,10 @@ class Booking_Functions
                         -- Rooms
                         GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS room_numbers,
                         -- Latest status
-                        COALESCE(bs.booking_status_name, 'Pending') AS booking_status,
+                        CASE 
+                            WHEN COALESCE(bs.booking_status_name, 'Pending') = 'Pending' AND b.booking_checkout_dateandtime < NOW() THEN 'Checked-Out'
+                            ELSE COALESCE(bs.booking_status_name, 'Pending')
+                        END AS booking_status,
                         -- Amounts
                         COALESCE(bill.billing_total_amount, b.booking_totalAmount) AS total_amount,
                         COALESCE(bill.billing_downpayment, b.booking_downpayment) AS downpayment
