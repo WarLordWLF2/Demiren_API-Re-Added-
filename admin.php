@@ -858,7 +858,9 @@ class Admin_Functions
                     b.reference_no,
                     b.booking_id,
                     c.customers_id,
-                    CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
+                    w.customers_walk_in_id,
+                    COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                             CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
                     b.guests_amnt,
                     b.booking_downpayment,
                     b.booking_checkin_dateandtime,
@@ -869,8 +871,10 @@ class Admin_Functions
                     GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS roomnumber_ids,
                     COALESCE(bs.booking_status_name, 'Pending') AS booking_status
                 FROM tbl_booking b
-                JOIN tbl_customers c 
+                LEFT JOIN tbl_customers c 
                     ON b.customers_id = c.customers_id
+                LEFT JOIN tbl_customers_walk_in w 
+                    ON b.customers_walk_in_id = w.customers_walk_in_id
                 LEFT JOIN tbl_customers_online co 
                     ON c.customers_online_id = co.customers_online_id
                 JOIN tbl_booking_room br 
