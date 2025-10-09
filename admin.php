@@ -7,34 +7,81 @@ class Admin_Functions
 
     // ------------------------------------------------------- No Table For Admin Yet, needs Changes ------------------------------------------------------- //
     // Login & Signup ???
-    function admin_login($data)
+    function login($json)
     {
+        // Handles ONLY employee/admin authentication against tbl_employee
         include "connection.php";
+        // Accept either decoded array or JSON string
+        $data = is_array($json) ? $json : json_decode($json, true);
 
-        // Only allow login for Admins (userlevel_id = 1)
-        $sql = "SELECT employee_id, employee_fname, employee_lname, employee_username, employee_email
-                FROM tbl_employee
-                WHERE employee_user_level_id = 1
-                  AND employee_email = :email
-                  AND employee_password = :password
+        if (!isset($data["username"]) || !isset($data["password"])) {
+            return [
+                "success" => false,
+                "message" => "Username and password are required"
+            ];
+        }
+
+        $identifier = $data["username"];
+        $inputPassword = $data["password"];
+
+        // Find active employee by username OR email. Fallback userlevel_name when tbl_user_level is missing.
+        $sql = "SELECT e.*, 
+                       COALESCE(ul.userlevel_name, CASE WHEN e.employee_user_level_id = 1 THEN 'Admin' ELSE 'Front Desk' END) AS userlevel_name
+                FROM tbl_employee e
+                LEFT JOIN tbl_user_level ul ON e.employee_user_level_id = ul.userlevel_id
+                WHERE (e.employee_username = :identifier OR e.employee_email = :identifier)
+                  AND e.employee_status = 1
                 LIMIT 1";
         $stmt = $conn->prepare($sql);
-        $stmt->bindParam(":email", $data["email"]);
-        $stmt->bindParam(":password", $data["password"]);
+        $stmt->bindParam(":identifier", $identifier);
         $stmt->execute();
-        $admin = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($admin) {
-            return json_encode([
-                "success" => true,
-                "admin" => $admin
-            ]);
-        } else {
-            return json_encode([
+        $employee = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($employee) {
+            $storedPassword = $employee["employee_password"];
+
+            // If password was created via password_hash, verify with password_verify; otherwise compare directly
+            $info = password_get_info($storedPassword);
+            $isHashed = isset($info['algo']) && $info['algo'] !== 0;
+
+            $valid = $isHashed ? password_verify($inputPassword, $storedPassword) : ($inputPassword === $storedPassword);
+
+            if ($valid) {
+                unset($employee["employee_password"]);
+                $userType = ($employee["userlevel_name"] === "Admin") ? "admin" : "front-desk";
+                return [
+                    "success" => true,
+                    "user" => $employee,
+                    "user_type" => $userType
+                ];
+            }
+
+            // Employee found but password mismatch
+            return [
                 "success" => false,
-                "message" => "Invalid credentials or not an admin."
-            ]);
+                "message" => "Invalid username or password"
+            ];
         }
+
+        // Employee not found as active, check if exists but inactive for clearer messaging
+        $checkEmpSql = "SELECT employee_status FROM tbl_employee WHERE (employee_username = :identifier OR employee_email = :identifier) LIMIT 1";
+        $checkEmpStmt = $conn->prepare($checkEmpSql);
+        $checkEmpStmt->bindParam(":identifier", $identifier);
+        $checkEmpStmt->execute();
+        $existingEmp = $checkEmpStmt->fetch(PDO::FETCH_ASSOC);
+        if ($existingEmp && (int)$existingEmp["employee_status"] !== 1) {
+            return [
+                "success" => false,
+                "message" => "Your employee account is inactive. Please contact the administrator."
+            ];
+        }
+
+        // No matching employee
+        return [
+            "success" => false,
+            "message" => "Invalid username or password"
+        ];
     }
 
     // Rooms
@@ -383,7 +430,6 @@ class Admin_Functions
     function changeBookingStatus($data)
     {
         include 'connection.php';
-
         try {
             $conn->beginTransaction();
 
@@ -3433,6 +3479,7 @@ class Admin_Functions
 
 
     // ------------------------------------------------------- Personal Profile ------------------------------------------------------- //
+    
     function getAdminProfile($json)
     {
         include "connection.php";
@@ -3669,14 +3716,7 @@ class Admin_Functions
         try {
             // Check if user is an employee/admin
             if (isset($data["user_type"]) && ($data["user_type"] === "admin" || $data["user_type"] === "employee")) {
-                $employeeId = $data["employee_id"];
-
-                // Update employee status to 'Offline' when logging out
-                $updateSql = "UPDATE tbl_employee SET employee_status = 'Offline', employee_updated_at = NOW() WHERE employee_id = :employee_id";
-                $updateStmt = $conn->prepare($updateSql);
-                $updateStmt->bindParam(":employee_id", $employeeId);
-                $updateStmt->execute();
-
+                // Do not change employee status on logout; simply acknowledge success
                 return [
                     "success" => true,
                     "message" => "Successfully logged out"
@@ -4375,7 +4415,9 @@ class Admin_Functions
 
 $AdminClass = new Admin_Functions();
 
-$methodType = isset($_POST["method"]) ? $_POST["method"] : 0;
+// Accept both "method" and "operation" for compatibility with various clients
+$methodType = $_POST["method"] ?? $_POST["operation"] ?? '';
+// Decode JSON payload if provided
 $jsonData = isset($_POST["json"]) ? json_decode($_POST["json"], true) : 0;
 
 // If no method provided, return error
@@ -4480,7 +4522,7 @@ switch ($methodType) {
 
     // --------------------------------- For Viewing Data or Login --------------------------------- //
     case "login":
-        echo $AdminClass->admin_login($jsonData);
+        echo json_encode($AdminClass->login($jsonData));
         break;
 
     case "getDetailedBookingSalesByMonth":

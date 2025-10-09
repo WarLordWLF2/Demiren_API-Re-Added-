@@ -88,6 +88,7 @@ class Transactions
 
         echo $result ? 'success' : 'fail';
     }
+    
     function getVacantRoomsByBooking($json)
     {
         include "connection.php";
