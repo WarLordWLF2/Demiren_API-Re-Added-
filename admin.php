@@ -835,7 +835,7 @@ class Admin_Functions
                 VALUES (:booking_id, :employee_id, :status_id, NOW())");
             $stmt->execute([
                 ':booking_id' => $bookingId,
-                ':employee_id' => 1, // Default admin/employee, can be customized
+                ':employee_id' => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
                 ':status_id' => 5 // Checked-In
             ]);
 
@@ -870,7 +870,7 @@ class Admin_Functions
             )");
             $stmt->execute([
                 ':booking_id' => $bookingId,
-                ':employee_id' => 1, // Default admin/employee, can be customized
+                ':employee_id' => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
                 ':payment_method_id' => 2, // Cash (from tbl_payment_method, adjust if needed)
                 ':invoice_number' => $reference_no,
                 ':downpayment' => $data['payment']['amountPaid'],
@@ -1791,7 +1791,7 @@ class Admin_Functions
             $stmt2->execute([
                 ':booking_id'          => $booking_id,
                 ':booking_charges_id'  => $booking_charges_id,
-                ':employee_id'         => 1,
+                ':employee_id'         => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
                 ':payment_method_id'   => $payment_method_id,
                 ':invoice_number'      => "0001", // or generate dynamically
                 ':downpayment'         => $charge_price, // can be customized
@@ -2058,14 +2058,17 @@ class Admin_Functions
     {
         include "connection.php";
 
-        $sql = "INSERT INTO tbl_discounts (discounts_name, discounts_percentage, discounts_amount, discounts_description)
-        VALUES (:discountName, :discountPercentage, :discountAmount, :discountDescription)";
+        $sql = "INSERT INTO tbl_discounts (discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in)\n        VALUES (:discountName, :discountPercentage, :discountAmount, :discountDescription, :discountStartIn, :discountEndsIn)";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(":discountName", $data["discountName"]);
         $stmt->bindParam(":discountPercentage", $data["discountPercentage"]);
         $stmt->bindParam(":discountAmount", $data["discountAmount"]);
         $stmt->bindParam(":discountDescription", $data["discountDescription"]);
+        $discountStartIn = isset($data["discountStartIn"]) ? $data["discountStartIn"] : null;
+        $discountEndsIn = isset($data["discountEndsIn"]) ? $data["discountEndsIn"] : null;
+        $stmt->bindParam(":discountStartIn", $discountStartIn);
+        $stmt->bindParam(":discountEndsIn", $discountEndsIn);
         $stmt->execute();
 
         $rowCount = $stmt->rowCount();
@@ -2080,7 +2083,8 @@ class Admin_Functions
 
         $sql = "UPDATE tbl_discounts 
         SET discounts_name = :discountName, discounts_percentage = :discountPercentage, 
-            discounts_amount = :discountAmount, discounts_description = :discountDescription
+            discounts_amount = :discountAmount, discounts_description = :discountDescription,
+            discount_start_in = :discountStartIn, discount_ends_in = :discountEndsIn
         WHERE discounts_id = :discountID";
 
         $stmt = $conn->prepare($sql);
@@ -2089,6 +2093,10 @@ class Admin_Functions
         $stmt->bindParam(":discountPercentage", $data["discountPercentage"]);
         $stmt->bindParam(":discountAmount", $data["discountAmount"]);
         $stmt->bindParam(":discountDescription", $data["discountDescription"]);
+        $discountStartIn = isset($data["discountStartIn"]) ? $data["discountStartIn"] : null;
+        $discountEndsIn = isset($data["discountEndsIn"]) ? $data["discountEndsIn"] : null;
+        $stmt->bindParam(":discountStartIn", $discountStartIn);
+        $stmt->bindParam(":discountEndsIn", $discountEndsIn);
         $stmt->execute();
 
         $rowCount = $stmt->rowCount();
@@ -3899,263 +3907,141 @@ class Admin_Functions
         }
     }
 
+    // Most Booked Rooms for Dashboard (Week/Month/Year)
+    function getMostBookedRooms()
+    {
+        include "connection.php";
+
+        $scope = $_POST['scope'] ?? 'month';
+        // Determine date filter using booking_checkin_dateandtime
+        if ($scope === 'week') {
+            $dateFilter = "b.booking_checkin_dateandtime >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)";
+        } elseif ($scope === 'year') {
+            $dateFilter = "YEAR(b.booking_checkin_dateandtime) = YEAR(CURDATE())";
+        } else { // month
+            $dateFilter = "MONTH(b.booking_checkin_dateandtime) = MONTH(CURDATE()) AND YEAR(b.booking_checkin_dateandtime) = YEAR(CURDATE())";
+        }
+
+        try {
+            $sql = "SELECT 
+                        rt.roomtype_name,
+                        COUNT(*) AS bookings_count
+                    FROM tbl_booking_room br
+                    INNER JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
+                    INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
+                    WHERE $dateFilter
+                    GROUP BY rt.roomtype_name
+                    ORDER BY bookings_count DESC";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return json_encode($result ?: []);
+        } catch (PDOException $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
     // ------------------------------------------------------- Transaction History Functions ------------------------------------------------------- //
 
-    function getTransactionHistory($data)
+    function getAllTransactionHistories($data = [])
     {
         include "connection.php";
 
         try {
-            $limit = isset($data['limit']) ? (int)$data['limit'] : 50;
-            $offset = isset($data['offset']) ? (int)$data['offset'] : 0;
-            $transaction_type = isset($data['transaction_type']) ? $data['transaction_type'] : 'all';
-            $status_filter = isset($data['status_filter']) ? $data['status_filter'] : 'all';
-            $date_from = isset($data['date_from']) ? $data['date_from'] : null;
-            $date_to = isset($data['date_to']) ? $data['date_to'] : null;
+            $viewer_user_type = $data['viewer_user_type'] ?? ($_POST['viewer_user_type'] ?? 'admin');
+            $viewer_employee_id = $data['viewer_employee_id'] ?? ($_POST['viewer_employee_id'] ?? null);
 
-            // Start with a simple booking query first
-            $sql = "SELECT 
-                        'booking' as transaction_type,
-                        b.booking_id as transaction_id,
-                        b.reference_no,
-                        CONCAT(COALESCE(c.customers_fname, w.customers_walk_in_fname), ' ', COALESCE(c.customers_lname, w.customers_walk_in_lname)) AS customer_name,
-                        COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
-                        COALESCE(c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
-                        b.booking_totalAmount as amount,
-                        b.booking_downpayment,
-                        'Active' as status,
-                        b.booking_checkin_dateandtime,
-                        b.booking_checkout_dateandtime,
-                        b.booking_created_at as transaction_date,
-                        'Booking created/updated' as description,
-                        'admin' as performed_by_type,
-                        'System' as performed_by_name,
-                        '' as room_number,
-                        '' as amenity_name,
-                        'success' as status_color
-                    FROM tbl_booking b
-                    LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-                    LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
-                    WHERE b.booking_isArchive = 0";
+            // Billing transactions
+            $sqlBilling = "SELECT 
+                bl.billing_id AS transaction_id,
+                'billing' AS transaction_type,
+                'tbl_billing' AS target_table,
+                bl.billing_id AS target_id,
+                bl.billing_total_amount AS amount,
+                bl.billing_dateandtime AS transaction_date,
+                'pending' AS status,
+                'warning' AS status_color,
+                bk.reference_no AS reference_no,
+                COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname), CONCAT(cw.customers_walk_in_fname, ' ', cw.customers_walk_in_lname)) AS customer_name,
+                COALESCE(c.customers_email, cw.customers_walk_in_email) AS customer_email,
+                NULL AS payment_method_name,
+                CONCAT(eB.employee_fname, ' ', eB.employee_lname) AS employee_name,
+                bl.employee_id AS employee_id,
+                'billing' AS source_type
+            FROM tbl_billing bl
+            INNER JOIN tbl_booking bk ON bl.booking_id = bk.booking_id
+            LEFT JOIN tbl_customers c ON bk.customers_id = c.customers_id
+            LEFT JOIN tbl_customers_walk_in cw ON bk.customers_walk_in_id = cw.customers_walk_in_id
+            LEFT JOIN tbl_employee eB ON bl.employee_id = eB.employee_id";
 
-            // Add filters
-            $where_conditions = [];
-            $params = [];
+            $stmtB = $conn->prepare($sqlBilling);
+            $stmtB->execute();
+            $billings = $stmtB->fetchAll(PDO::FETCH_ASSOC);
 
-            if ($transaction_type !== 'all' && $transaction_type !== 'booking') {
-                // If not booking type, return empty for now
-                return [
-                    'success' => true,
-                    'transactions' => [],
-                    'total_count' => 0,
-                    'current_page' => 1,
-                    'total_pages' => 1
-                ];
+            // Invoice transactions (treated as payments)
+            $sqlInv = "SELECT
+                i.invoice_id AS transaction_id,
+                'payment' AS transaction_type,
+                'tbl_invoice' AS target_table,
+                i.invoice_id AS target_id,
+                i.invoice_total_amount AS amount,
+                CONCAT(i.invoice_date, ' ', i.invoice_time) AS transaction_date,
+                CASE WHEN i.invoice_status_id = 1 THEN 'success' ELSE 'pending' END AS status,
+                CASE WHEN i.invoice_status_id = 1 THEN 'success' ELSE 'warning' END AS status_color,
+                bk.reference_no AS reference_no,
+                COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname), CONCAT(cw.customers_walk_in_fname, ' ', cw.customers_walk_in_lname)) AS customer_name,
+                COALESCE(c.customers_email, cw.customers_walk_in_email) AS customer_email,
+                pm.payment_method_name AS payment_method_name,
+                CONCAT(eI.employee_fname, ' ', eI.employee_lname) AS employee_name,
+                i.employee_id AS employee_id,
+                'invoice' AS source_type
+            FROM tbl_invoice i
+            INNER JOIN tbl_billing bl ON i.billing_id = bl.billing_id
+            INNER JOIN tbl_booking bk ON bl.booking_id = bk.booking_id
+            LEFT JOIN tbl_customers c ON bk.customers_id = c.customers_id
+            LEFT JOIN tbl_customers_walk_in cw ON bk.customers_walk_in_id = cw.customers_walk_in_id
+            LEFT JOIN tbl_payment_method pm ON i.payment_method_id = pm.payment_method_id
+            LEFT JOIN tbl_employee eI ON i.employee_id = eI.employee_id";
+
+            $stmtI = $conn->prepare($sqlInv);
+            $stmtI->execute();
+            $invoices = $stmtI->fetchAll(PDO::FETCH_ASSOC);
+
+            $transactions = array_merge($billings ?: [], $invoices ?: []);
+
+            // Restrict to front_desk employee if provided
+            if ($viewer_user_type !== 'admin' && !empty($viewer_employee_id)) {
+                $transactions = array_values(array_filter($transactions, function($t) use ($viewer_employee_id) {
+                    $candidates = [];
+                    foreach (['user_id','employee_id','actor_user_id','actor_id','created_by'] as $k) {
+                        if (isset($t[$k]) && $t[$k] !== null) {
+                            $candidates[] = is_string($t[$k]) ? intval($t[$k]) : $t[$k];
+                        }
+                    }
+                    return !empty($candidates) && in_array(intval($viewer_employee_id), $candidates, true);
+                }));
             }
 
-            if ($status_filter !== 'all') {
-                // Since we don't have booking status, we'll skip this filter for now
-                // $where_conditions[] = "bs.booking_status_name = :status_filter";
-                // $params[':status_filter'] = $status_filter;
-            }
+            // Sort by latest
+            usort($transactions, function($a, $b) {
+                return strtotime($b['transaction_date']) <=> strtotime($a['transaction_date']);
+            });
 
-            if ($date_from) {
-                $where_conditions[] = "DATE(b.booking_created_at) >= :date_from";
-                $params[':date_from'] = $date_from;
-            }
-
-            if ($date_to) {
-                $where_conditions[] = "DATE(b.booking_created_at) <= :date_to";
-                $params[':date_to'] = $date_to;
-            }
-
-            // Add WHERE conditions
-            if (!empty($where_conditions)) {
-                $sql .= " AND " . implode(" AND ", $where_conditions);
-            }
-
-            $sql .= " ORDER BY b.booking_created_at DESC LIMIT :limit OFFSET :offset";
-
-            $stmt = $conn->prepare($sql);
-            
-            // Bind parameters
-            foreach ($params as $key => $value) {
-                $stmt->bindValue($key, $value);
-            }
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-            
-            $stmt->execute();
-            $transactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-            // Get total count
-            $count_sql = "SELECT COUNT(*) as total FROM tbl_booking b
-                         LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-                         LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
-                         WHERE b.booking_isArchive = 0";
-            
-            if (!empty($where_conditions)) {
-                $count_sql .= " AND " . implode(" AND ", $where_conditions);
-            }
-            
-            $count_stmt = $conn->prepare($count_sql);
-            foreach ($params as $key => $value) {
-                $count_stmt->bindValue($key, $value);
-            }
-            $count_stmt->execute();
-            $total_count = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
-
-            return [
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([
                 'success' => true,
-                'transactions' => $transactions,
-                'total_count' => $total_count,
-                'current_page' => floor($offset / $limit) + 1,
-                'total_pages' => ceil($total_count / $limit)
-            ];
-
+                'count' => count($transactions),
+                'transactions' => $transactions
+            ]);
         } catch (Exception $e) {
-            return [
-                'success' => false,
-                'error' => 'Database error: ' . $e->getMessage(),
-                'transactions' => [],
-                'total_count' => 0,
-                'current_page' => 1,
-                'total_pages' => 1
-            ];
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['success' => false, 'error' => $e->getMessage()]);
         }
     }
 
-    function getTransactionStats()
-    {
-        include "connection.php";
-
-        try {
-            // Simple stats for now - just booking data
-            $sql = "SELECT 
-                        COUNT(*) as total_transactions,
-                        SUM(booking_totalAmount) as total_amount_today
-                    FROM tbl_booking 
-                    WHERE DATE(booking_created_at) = CURDATE() 
-                    AND booking_isArchive = 0";
-
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $today_stats = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Week stats
-            $week_sql = "SELECT 
-                            COUNT(*) as total_transactions,
-                            SUM(booking_totalAmount) as total_amount_week
-                        FROM tbl_booking 
-                        WHERE YEARWEEK(booking_created_at) = YEARWEEK(CURDATE()) 
-                        AND booking_isArchive = 0";
-
-            $stmt = $conn->prepare($week_sql);
-            $stmt->execute();
-            $week_stats = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            // Month stats
-            $month_sql = "SELECT 
-                            COUNT(*) as total_transactions,
-                            SUM(booking_totalAmount) as total_amount_month
-                        FROM tbl_booking 
-                        WHERE YEAR(booking_created_at) = YEAR(CURDATE()) 
-                        AND MONTH(booking_created_at) = MONTH(CURDATE()) 
-                        AND booking_isArchive = 0";
-
-            $stmt = $conn->prepare($month_sql);
-            $stmt->execute();
-            $month_stats = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            return [
-                'success' => true,
-                'today' => $today_stats,
-                'week' => $week_stats,
-                'month' => $month_stats
-            ];
-
-        } catch (Exception $e) {
-            return [
-                'success' => false,
-                'error' => 'Database error: ' . $e->getMessage(),
-                'today' => ['total_transactions' => 0, 'total_amount_today' => 0],
-                'week' => ['total_transactions' => 0, 'total_amount_week' => 0],
-                'month' => ['total_transactions' => 0, 'total_amount_month' => 0]
-            ];
-        }
-    }
-
-    function searchTransactions($data)
-    {
-        include "connection.php";
-
-        try {
-            $search_term = isset($data['search_term']) ? '%' . $data['search_term'] . '%' : '%%';
-            $limit = isset($data['limit']) ? (int)$data['limit'] : 20;
-
-            $sql = "SELECT 
-                        'booking' as transaction_type,
-                        b.booking_id as transaction_id,
-                        b.reference_no,
-                        CONCAT(COALESCE(c.customers_fname, w.customers_walk_in_fname), ' ', COALESCE(c.customers_lname, w.customers_walk_in_lname)) AS customer_name,
-                        COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
-                        'Active' as status,
-                        b.booking_created_at as transaction_date,
-                        'Booking transaction' as description,
-                        'booking' as status_color
-                    FROM tbl_booking b
-                    LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
-                    LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
-                    WHERE (b.reference_no LIKE :search_term 
-                           OR c.customers_fname LIKE :search_term 
-                           OR c.customers_lname LIKE :search_term
-                           OR w.customers_walk_in_fname LIKE :search_term
-                           OR w.customers_walk_in_lname LIKE :search_term
-                           OR c.customers_email LIKE :search_term
-                           OR w.customers_walk_in_email LIKE :search_term)
-                    AND b.booking_isArchive = 0
-                    ORDER BY b.booking_created_at DESC
-                    LIMIT :limit";
-
-            $stmt = $conn->prepare($sql);
-            $stmt->bindParam(':search_term', $search_term);
-            $stmt->bindParam(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
-            
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        } catch (Exception $e) {
-            return [];
-        }
-    }
-
-    function testTransactionAPI()
-    {
-        include "connection.php";
-
-        try {
-            // Test basic database connection
-            $sql = "SELECT COUNT(*) as booking_count FROM tbl_booking WHERE booking_isArchive = 0";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
-
-            return [
-                'success' => true,
-                'message' => 'Database connection successful',
-                'booking_count' => $result['booking_count'],
-                'timestamp' => date('Y-m-d H:i:s')
-            ];
-
-        } catch (Exception $e) {
-            return [
-                'success' => false,
-                'error' => 'Database error: ' . $e->getMessage(),
-                'timestamp' => date('Y-m-d H:i:s')
-            ];
-        }
-    }
-
+    
     function addSampleBooking()
     {
         include "connection.php";
@@ -4410,8 +4296,311 @@ class Admin_Functions
         return json_encode(["success" => true, "billing_data" => $result]);
     }
 
-}
+    // ========================= Guest Profile Functions =========================
+    function getFeedbacks()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT CONCAT(b.customers_fname,' ',b.customers_lname) AS customer_fullname, a.*
+                    FROM tbl_customersreviews a
+                    INNER JOIN tbl_customers b ON b.customers_id = a.customers_id";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+            // Clean output buffer to avoid HTML/PHP warnings mixing with JSON
+            if (ob_get_length()) {
+                ob_clean();
+            }
+            return !empty($result) ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([]);
+        }
+    }
+
+    function getOnlineCustomers()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT
+                        co.customers_online_id,
+                        co.customers_online_username,
+                        co.customers_online_email,
+                        co.customers_online_phone,
+                        co.customers_online_created_at,
+                        CASE 
+                            WHEN co.customers_online_authentication_status IN (1, '1', 'true', 'TRUE', 'yes', 'YES') THEN 1 
+                            ELSE 0 
+                        END AS customers_online_authentication_status,
+                        co.customers_online_profile_image,
+                        c.customers_id,
+                        c.customers_fname,
+                        c.customers_lname,
+                        c.customers_date_of_birth AS customers_birthdate,
+                        c.customers_email AS customers_email,
+                        c.customers_phone_number AS customers_phone
+                    FROM tbl_customers_online co
+                    LEFT JOIN tbl_customers c ON c.customers_online_id = co.customers_online_id
+                    ORDER BY co.customers_online_created_at DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (ob_get_length()) {
+                ob_clean();
+            }
+
+            return !empty($result) ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([]);
+        }
+    }
+
+    // ========================= Visitors Log Functions =========================
+    function getVisitorApprovalStatuses()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT visitorapproval_id, visitorapproval_status FROM tbl_visitorapproval ORDER BY visitorapproval_id ASC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (ob_get_length()) { ob_clean(); }
+            return !empty($result) ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([]);
+        }
+    }
+
+    function getVisitorLogs()
+    {
+        include "connection.php";
+        try {
+            $sql = "SELECT 
+                        visitorlogs_id,
+                        visitorapproval_id,
+                        booking_id,
+                        employee_id,
+                        visitorlogs_visitorname,
+                        visitorlogs_purpose,
+                        visitorlogs_checkin_time,
+                        visitorlogs_checkout_time
+                    FROM tbl_visitorlogs
+                    ORDER BY visitorlogs_checkin_time DESC";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute();
+            $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (ob_get_length()) { ob_clean(); }
+            return !empty($result) ? json_encode($result) : json_encode([]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([]);
+        }
+    }
+
+    function addVisitorLog()
+    {
+        include "connection.php";
+        try {
+            $visitorapproval_id = $_POST['visitorapproval_id'] ?? null;
+            $booking_id = $_POST['booking_id'] ?? null;
+            $employee_id = $_POST['employee_id'] ?? null;
+            $visitorname = $_POST['visitorlogs_visitorname'] ?? '';
+            $purpose = $_POST['visitorlogs_purpose'] ?? '';
+            $checkin = $_POST['visitorlogs_checkin_time'] ?? null;
+            $checkout = $_POST['visitorlogs_checkout_time'] ?? null;
+
+            // Auto-approve if no status is provided
+            if (!$visitorapproval_id) {
+                $stmtStatus = $conn->prepare("SELECT visitorapproval_id FROM tbl_visitorapproval WHERE LOWER(visitorapproval_status) LIKE '%approved%' LIMIT 1");
+                $stmtStatus->execute();
+                $visitorapproval_id = $stmtStatus->fetchColumn() ?: null;
+            }
+            // Do not allow checkout to be set during creation
+            $checkout = null;
+
+            $sql = "INSERT INTO tbl_visitorlogs (
+                        visitorapproval_id, booking_id, employee_id,
+                        visitorlogs_visitorname, visitorlogs_purpose,
+                        visitorlogs_checkin_time, visitorlogs_checkout_time
+                    ) VALUES (
+                        :visitorapproval_id, :booking_id, :employee_id,
+                        :visitorname, :purpose, :checkin, :checkout
+                    )";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':visitorapproval_id', $visitorapproval_id);
+            $stmt->bindParam(':booking_id', $booking_id);
+            $stmt->bindParam(':employee_id', $employee_id);
+            $stmt->bindParam(':visitorname', $visitorname);
+            $stmt->bindParam(':purpose', $purpose);
+            $stmt->bindParam(':checkin', $checkin);
+            $stmt->bindParam(':checkout', $checkout);
+            $ok = $stmt->execute();
+
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => $ok === true, 'success' => $ok === true]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => false, 'success' => false, 'message' => 'Database error']);
+        }
+    }
+
+    function updateVisitorLog()
+    {
+        include "connection.php";
+        try {
+            $id = $_POST['visitorlogs_id'] ?? null;
+            if (!$id) {
+                if (ob_get_length()) { ob_clean(); }
+                return json_encode(['response' => false, 'success' => false, 'message' => 'Missing visitorlogs_id']);
+            }
+
+            // Fetch current visitor log to determine if checkout is being set for the first time
+            $curStmt = $conn->prepare("SELECT booking_id, visitorlogs_checkin_time, visitorlogs_checkout_time FROM tbl_visitorlogs WHERE visitorlogs_id = :id");
+            $curStmt->bindParam(':id', $id);
+            $curStmt->execute();
+            $current = $curStmt->fetch(PDO::FETCH_ASSOC);
+
+            $checkoutPosted = $_POST['visitorlogs_checkout_time'] ?? null;
+            $shouldProcessCharge = $checkoutPosted && $current && empty($current['visitorlogs_checkout_time']);
+
+            $fields = [];
+            $params = [];
+
+            $map = [
+                'visitorapproval_id' => 'visitorapproval_id',
+                'booking_id' => 'booking_id',
+                'employee_id' => 'employee_id',
+                'visitorlogs_visitorname' => 'visitorlogs_visitorname',
+                'visitorlogs_purpose' => 'visitorlogs_purpose',
+                'visitorlogs_checkin_time' => 'visitorlogs_checkin_time',
+                'visitorlogs_checkout_time' => 'visitorlogs_checkout_time'
+            ];
+
+            foreach ($map as $postKey => $col) {
+                if (isset($_POST[$postKey])) {
+                    $fields[] = "$col = :$postKey";
+                    $params[":$postKey"] = $_POST[$postKey];
+                }
+            }
+
+            if (empty($fields)) {
+                if (ob_get_length()) { ob_clean(); }
+                return json_encode(['response' => false, 'success' => false, 'message' => 'No fields to update']);
+            }
+
+            $sql = "UPDATE tbl_visitorlogs SET " . implode(', ', $fields) . " WHERE visitorlogs_id = :id";
+            $stmt = $conn->prepare($sql);
+            foreach ($params as $key => $val) {
+                $stmt->bindValue($key, $val);
+            }
+            $stmt->bindValue(':id', $id);
+            $ok = $stmt->execute();
+
+            // After successful update, if checkout was newly set and booking exists, create a visitor stay charge
+            if ($ok === true && $shouldProcessCharge && !empty($current['booking_id'])) {
+                $checkin = $current['visitorlogs_checkin_time'] ?? null;
+                $checkout = $checkoutPosted;
+
+                if ($checkin && $checkout) {
+                    $checkinTs = strtotime($checkin);
+                    $checkoutTs = strtotime($checkout);
+
+                    if ($checkinTs !== false && $checkoutTs !== false && $checkoutTs > $checkinTs) {
+                        $durationHours = ($checkoutTs - $checkinTs) / 3600; // hours
+
+                        // Business rule: ₱420 per 6 hours, prorated
+                        $rate = 420; // price per 6-hour block
+                        $blockHours = 6;
+                        $quantity = $durationHours / $blockHours; // can be fractional
+                        $total = $rate * $quantity;
+
+                        // Find a booking_room_id for the associated booking
+                        $roomStmt = $conn->prepare("SELECT booking_room_id FROM tbl_booking_room WHERE booking_id = :booking_id LIMIT 1");
+                        $roomStmt->bindParam(':booking_id', $current['booking_id']);
+                        $roomStmt->execute();
+                        $booking_room_id = $roomStmt->fetchColumn();
+
+                        if ($booking_room_id) {
+                            // Ensure charges_master entry exists for 'Visitor Stay Charge'
+                            $cmStmt = $conn->prepare("SELECT charges_master_id FROM tbl_charges_master WHERE charges_master_name = 'Visitor Stay Charge' LIMIT 1");
+                            $cmStmt->execute();
+                            $charges_master_id = $cmStmt->fetchColumn();
+
+                            if (!$charges_master_id) {
+                                // Try to find 'Extra Charges' category id
+                                $catStmt = $conn->prepare("SELECT charges_category_id FROM tbl_charges_category WHERE LOWER(charges_category_name) LIKE '%extra%' LIMIT 1");
+                                $catStmt->execute();
+                                $category_id = $catStmt->fetchColumn();
+                                if (!$category_id) {
+                                    $category_id = 3; // Fallback to typical 'Extra Charges' category id
+                                }
+                                $createCm = $conn->prepare("INSERT INTO tbl_charges_master (charges_category_id, charges_master_name, charges_master_price, charges_master_description) VALUES (:category_id, :name, :price, :desc)");
+                                $name = 'Visitor Stay Charge';
+                                $desc = 'Auto-generated charge for visitor stay (₱420 per 6 hours, prorated)';
+                                $createCm->bindParam(':category_id', $category_id);
+                                $createCm->bindParam(':name', $name);
+                                $createCm->bindParam(':price', $rate);
+                                $createCm->bindParam(':desc', $desc);
+                                if ($createCm->execute()) {
+                                    $charges_master_id = $conn->lastInsertId();
+                                }
+                            }
+
+                            if ($charges_master_id) {
+                                // Insert booking charge, mark as approved (status 2)
+                                $ins = $conn->prepare("INSERT INTO tbl_booking_charges (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity, booking_charges_total, booking_charge_status) VALUES (:booking_room_id, :charges_master_id, :price, :qty, :total, 2)");
+                                $ins->bindParam(':booking_room_id', $booking_room_id);
+                                $ins->bindParam(':charges_master_id', $charges_master_id);
+                                $ins->bindParam(':price', $rate);
+                                $ins->bindParam(':qty', $quantity);
+                                $ins->bindParam(':total', $total);
+                                $ins->execute();
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => $ok === true, 'success' => $ok === true]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => false, 'success' => false, 'message' => 'Database error']);
+        }
+    }
+
+    function setVisitorApproval()
+    {
+        include "connection.php";
+        try {
+            $id = $_POST['visitorlogs_id'] ?? null;
+            $statusId = $_POST['visitorapproval_id'] ?? null;
+            if (!$id || !$statusId) {
+                if (ob_get_length()) { ob_clean(); }
+                return json_encode(['response' => false, 'success' => false, 'message' => 'Missing parameters']);
+            }
+
+            $sql = "UPDATE tbl_visitorlogs SET visitorapproval_id = :statusId WHERE visitorlogs_id = :id";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':statusId', $statusId);
+            $stmt->bindParam(':id', $id);
+            $ok = $stmt->execute();
+
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => $ok === true, 'success' => $ok === true]);
+        } catch (PDOException $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['response' => false, 'success' => false, 'message' => 'Database error']);
+        }
+    }
+
+}
 
 $AdminClass = new Admin_Functions();
 
@@ -4449,6 +4638,10 @@ switch ($methodType) {
         echo $AdminClass->autoCheckoutAndSeedBillings();
         break;
 
+    case "getMostBookedRooms":
+        echo $AdminClass->getMostBookedRooms();
+        break;
+
     case "requestCustomerRooms":
         echo $AdminClass->getAllCustomersRooms($jsonData);
         break;
@@ -4479,7 +4672,7 @@ switch ($methodType) {
 
     // Online
     case "reqBookingList":
-        $AdminClass->customerBookingReqs();
+        echo $AdminClass->customerBookingReqs();
         break;
 
     case "approveCustomerBooking":
@@ -4494,6 +4687,10 @@ switch ($methodType) {
     // --------------------------------- For Billings and Invoices --------------------------------- //
     case "getAllPayMethods":
         echo $AdminClass->getPaymentMethods();
+        break;
+
+    case "getAllTransactionHistories":
+        echo $AdminClass->getAllTransactionHistories($jsonData);
         break;
 
     case 'finalizeBookingApproval':
@@ -4697,6 +4894,36 @@ switch ($methodType) {
         echo json_encode($AdminClass->getPendingAmenityCount());
         break;
 
+    // ========================= Guest Profile Functions =========================
+    case "getOnlineCustomers":
+        echo $AdminClass->getOnlineCustomers();
+        break;
+
+    case "getFeedbacks":
+        echo $AdminClass->getFeedbacks();
+        break;
+
+    // ========================= Visitors Log =========================
+    case "get_visitor_approval_statuses":
+        echo $AdminClass->getVisitorApprovalStatuses();
+        break;
+
+    case "get_visitor_logs":
+        echo $AdminClass->getVisitorLogs();
+        break;
+
+    case "add_visitor_log":
+        echo $AdminClass->addVisitorLog();
+        break;
+
+    case "update_visitor_log":
+        echo $AdminClass->updateVisitorLog();
+        break;
+
+    case "set_visitor_approval":
+        echo $AdminClass->setVisitorApproval();
+        break;
+
     // -------- Booking Extension with Payment -------- //
     case "extendBookingWithPayment":
         echo $AdminClass->extendBookingWithPayment($jsonData);
@@ -4744,23 +4971,6 @@ switch ($methodType) {
 
     case "updateAdminProfile":
         echo json_encode($AdminClass->updateAdminProfile(json_encode($jsonData)));
-        break;
-
-        // Transaction History
-    case "getTransactionHistory":
-        echo json_encode($AdminClass->getTransactionHistory($jsonData));
-        break;
-
-    case "getTransactionStats":
-        echo json_encode($AdminClass->getTransactionStats());
-        break;
-
-    case "searchTransactions":
-        echo json_encode($AdminClass->searchTransactions($jsonData));
-        break;
-
-    case "testTransactionAPI":
-        echo json_encode($AdminClass->testTransactionAPI());
         break;
 
     case "addSampleBooking":

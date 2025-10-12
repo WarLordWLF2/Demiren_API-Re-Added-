@@ -952,6 +952,31 @@ class Demiren_customer
         return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
     }
 
+    function getOnlineCustomers()
+    {
+        include "connection.php";
+        $sql = "SELECT 
+                    co.customers_online_id,
+                    co.customers_online_username,
+                    co.customers_online_email,
+                    co.customers_online_phone,
+                    co.customers_online_created_at,
+                    CASE WHEN co.customers_online_status IN ('active','authenticated','1','true') THEN 1 ELSE 0 END AS customers_online_authentication_status,
+                    co.customers_online_profile_image,
+                    c.customers_id,
+                    c.customers_fname,
+                    c.customers_lname,
+                    c.customers_birthdate,
+                    c.customers_email AS customers_email,
+                    c.customers_phone AS customers_phone
+                FROM tbl_customers_online co
+                LEFT JOIN tbl_customers c ON c.customers_online_id = co.customers_online_id
+                ORDER BY co.customers_online_created_at DESC";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute();
+        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
+    }
+
     function customerRegistration($json)
     {
         include "connection.php";
@@ -2201,6 +2226,9 @@ switch ($operation) {
         break;
     case "getFeedbacks":
         echo json_encode($demiren_customer->getFeedbacks());
+        break;
+    case "getOnlineCustomers":
+        echo json_encode($demiren_customer->getOnlineCustomers());
         break;
     case "customerRegistration":
         echo $demiren_customer->customerRegistration($json);

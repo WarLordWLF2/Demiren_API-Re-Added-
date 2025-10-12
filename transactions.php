@@ -854,37 +854,44 @@ class Transactions
             // Get room charges
             $roomQuery = $conn->prepare("
                 SELECT 
-                    'Room Charges' AS charge_type,
-                    rt.roomtype_name AS charge_name,
-                    rt.roomtype_price AS unit_price,
-                    1 AS quantity,
-                    rt.roomtype_price AS total_amount,
-                    br.booking_room_id,
-                    'Room' AS category
+                    'Room Charges' as charge_type,
+                    rt.roomtype_name as charge_name,
+                    'Room' as category,
+                    r.roomnumber_id as room_number,
+                    rt.roomtype_name as room_type,
+                    rt.roomtype_price as unit_price,
+                    1 as quantity,
+                    rt.roomtype_price as total_amount,
+                    rt.roomtype_description as charges_master_description
                 FROM tbl_booking_room br
-                JOIN tbl_roomtype rt ON br.roomtype_id = rt.roomtype_id
+                JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
                 WHERE br.booking_id = :booking_id
             ");
             $roomQuery->bindParam(':booking_id', $booking_id);
             $roomQuery->execute();
             $roomCharges = $roomQuery->fetchAll(PDO::FETCH_ASSOC);
 
-            // Get additional charges (amenities, services, damages)
+            // Get additional charges
             $chargesQuery = $conn->prepare("
                 SELECT 
-                    'Additional Charges' AS charge_type,
-                    cm.charges_master_name AS charge_name,
-                    bc.booking_charges_price AS unit_price,
-                    bc.booking_charges_quantity AS quantity,
-                    (bc.booking_charges_price * bc.booking_charges_quantity) AS total_amount,
-                    bc.booking_room_id,
-                    cc.charges_category_name AS category,
-                    bc.booking_charges_id
+                    'Additional Charges' as charge_type,
+                    cm.charges_master_name as charge_name,
+                    cc.charges_category_name as category,
+                    r.roomnumber_id as room_number,
+                    rt.roomtype_name as room_type,
+                    bc.booking_charges_price as unit_price,
+                    bc.booking_charges_quantity as quantity,
+                    (bc.booking_charges_price * bc.booking_charges_quantity) as total_amount,
+                    cm.charges_master_description as charges_master_description
                 FROM tbl_booking_charges bc
+                JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
+                JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
                 JOIN tbl_charges_master cm ON bc.charges_master_id = cm.charges_master_id
                 JOIN tbl_charges_category cc ON cm.charges_category_id = cc.charges_category_id
-                JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
                 WHERE br.booking_id = :booking_id
+                AND bc.booking_charge_status = 2
             ");
             $chargesQuery->bindParam(':booking_id', $booking_id);
             $chargesQuery->execute();
@@ -1200,7 +1207,7 @@ class Transactions
                 SELECT 
                     'Room Charges' as charge_type,
                     rt.roomtype_name as charge_name,
-                    'Room Service' as category,
+                    'Room' as category,
                     r.roomnumber_id as room_number,
                     rt.roomtype_name as room_type,
                     rt.roomtype_price as unit_price,
@@ -1226,7 +1233,7 @@ class Transactions
                     rt.roomtype_name as room_type,
                     bc.booking_charges_price as unit_price,
                     bc.booking_charges_quantity as quantity,
-                    bc.booking_charges_total as total_amount,
+                    (bc.booking_charges_price * bc.booking_charges_quantity) as total_amount,
                     cm.charges_master_description as charges_master_description
                 FROM tbl_booking_charges bc
                 JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
