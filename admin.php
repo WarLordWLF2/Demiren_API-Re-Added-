@@ -145,6 +145,14 @@ class Admin_Functions
                         ON r.room_status_id = st.status_id
                     LEFT JOIN tbl_imagesroommaster img 
                         ON r.roomtype_id = img.roomtype_id
+                    WHERE NOT EXISTS (
+                        SELECT 1
+                        FROM tbl_booking_room br
+                        JOIN tbl_booking b ON b.booking_id = br.booking_id
+                        WHERE br.roomnumber_id = r.roomnumber_id
+                          AND b.booking_isArchive = 0
+                          AND DATE(b.booking_checkout_dateandtime) >= CURDATE()
+                    )
                     GROUP BY 
                         r.roomnumber_id,
                         r.roomfloor,
@@ -242,6 +250,7 @@ class Admin_Functions
                         b.booking_checkin_dateandtime,
                         b.booking_checkout_dateandtime,
                         b.booking_created_at,
+                        b.booking_fileName,
                         -- Customer core
                         COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
                                  CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
@@ -313,6 +322,7 @@ class Admin_Functions
                         b.booking_checkin_dateandtime,
                         b.booking_checkout_dateandtime,
                         b.booking_created_at,
+                        b.booking_fileName,
                         -- Customer core
                         COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
                                  CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
@@ -437,6 +447,23 @@ class Admin_Functions
             }
             $filtered = array_values(array_filter($all, function($row) {
                 return isset($row['booking_status']) && $row['booking_status'] === 'Checked-In';
+            }));
+            return json_encode($filtered);
+        } catch (Exception $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
+    // Filtered enhanced booking list: only latest status 'Pending'
+    function viewPendingBookingsEnhanced()
+    {
+        try {
+            $all = json_decode($this->viewBookingListEnhanced(), true);
+            if (!is_array($all)) {
+                return json_encode([]);
+            }
+            $filtered = array_values(array_filter($all, function($row) {
+                return isset($row['booking_status']) && $row['booking_status'] === 'Pending';
             }));
             return json_encode($filtered);
         } catch (Exception $e) {
@@ -952,6 +979,8 @@ class Admin_Functions
                     GROUP_CONCAT(br.roomtype_id ORDER BY br.booking_room_id ASC) AS roomtype_ids,
                     GROUP_CONCAT(rt.roomtype_name ORDER BY br.booking_room_id ASC) AS roomtype_names,
                     GROUP_CONCAT(br.roomnumber_id ORDER BY br.booking_room_id ASC) AS roomnumber_ids,
+                    COALESCE(co.customers_online_email, c.customers_email, w.customers_walk_in_email) AS customer_email,
+                    COALESCE(co.customers_online_phone, c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
                     COALESCE(bs.booking_status_name, 'Pending') AS booking_status
                 FROM tbl_booking b
                 LEFT JOIN tbl_customers c 
@@ -1157,14 +1186,29 @@ class Admin_Functions
                 ]);
             }
 
-            // 5️⃣ Insert booking history (Approved = 2)
-            $sqlHistory = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
-                             VALUES (:booking_id, :admin_id, 2, NOW())";
-            $stmtHistory = $conn->prepare($sqlHistory);
-            $stmtHistory->execute([
+            // 5️⃣ Update latest booking history to Approved (2) instead of inserting a new row
+            // Try to update the most recent history record for this booking
+            $sqlHistoryUpdate = "UPDATE tbl_booking_history 
+                                 SET employee_id = :admin_id, status_id = 2, updated_at = NOW()
+                                 WHERE booking_id = :booking_id
+                                 ORDER BY updated_at DESC
+                                 LIMIT 1";
+            $stmtHistoryUpdate = $conn->prepare($sqlHistoryUpdate);
+            $stmtHistoryUpdate->execute([
                 ':booking_id' => $bookingId,
                 ':admin_id'   => $adminId
             ]);
+
+            // If no history existed for this booking, insert one as a fallback
+            if ($stmtHistoryUpdate->rowCount() === 0) {
+                $sqlHistoryInsert = "INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at)
+                                     VALUES (:booking_id, :admin_id, 2, NOW())";
+                $stmtHistoryInsert = $conn->prepare($sqlHistoryInsert);
+                $stmtHistoryInsert->execute([
+                    ':booking_id' => $bookingId,
+                    ':admin_id'   => $adminId
+                ]);
+            }
 
             $conn->commit();
 
@@ -1181,8 +1225,6 @@ class Admin_Functions
                         b.booking_checkout_dateandtime,
                         b.booking_totalAmount,
                         b.booking_downpayment,
-                        b.adult,
-                        b.children,
                         b.guests_amnt,
                         -- Billing details
                         bill.billing_total_amount,
@@ -1197,7 +1239,10 @@ class Admin_Functions
                         inv.invoice_id,
                         inv.invoice_date,
                         inv.invoice_time,
-                        inv.invoice_total_amount
+                        inv.invoice_total_amount,
+                        -- Aggregated guest counts
+                        COALESCE(brsum.total_adults, 0) AS adult_count,
+                        COALESCE(brsum.total_children, 0) AS children_count
                     FROM tbl_booking b
                     LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
                     LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
@@ -1210,6 +1255,13 @@ class Admin_Functions
                     LEFT JOIN tbl_billing bill ON bill.billing_id = lb.latest_billing_id
                     LEFT JOIN tbl_payment_method pm ON bill.payment_method_id = pm.payment_method_id
                     LEFT JOIN tbl_invoice inv ON bill.billing_id = inv.billing_id
+                    LEFT JOIN (
+                        SELECT booking_id, 
+                               SUM(bookingRoom_adult) AS total_adults,
+                               SUM(bookingRoom_children) AS total_children
+                        FROM tbl_booking_room
+                        GROUP BY booking_id
+                    ) brsum ON brsum.booking_id = b.booking_id
                     WHERE b.booking_id = :booking_id LIMIT 1");
                 $infoStmt->execute([':booking_id' => $bookingId]);
                 $info = $infoStmt->fetch(PDO::FETCH_ASSOC) ?: [];
@@ -1231,14 +1283,14 @@ class Admin_Functions
                 $invoiceDate = $info['invoice_date'] ?? '';
                 $invoiceTime = $info['invoice_time'] ?? '';
 
-                // Format dates to be more readable (e.g., "June 3, 2025")
+                // Format dates to be more readable (e.g., "June 3, 2025") and include standard times
                 $checkIn = '';
                 $checkOut = '';
                 if (!empty($checkInRaw)) {
-                    $checkIn = date('F j, Y', strtotime($checkInRaw));
+                    $checkIn = date('F j, Y', strtotime($checkInRaw)) . ' at 2:00 PM';
                 }
                 if (!empty($checkOutRaw)) {
-                    $checkOut = date('F j, Y', strtotime($checkOutRaw));
+                    $checkOut = date('F j, Y', strtotime($checkOutRaw)) . ' at 12:00 PM';
                 }
 
                 // Determine assigned rooms (prefer provided list; otherwise read from DB)
@@ -1250,7 +1302,7 @@ class Admin_Functions
                 }
 
                 if (!empty($customerEmail)) {
-                    $subject = 'Booking Confirmation - Demiren Hotel';
+                    $subject = 'Booking Confirmation - Demiren Hotel' . (!empty($refNo) ? ' - Ref ' . $refNo : '');
                     $roomsText = !empty($assignedRooms) ? implode(', ', array_map('strval', $assignedRooms)) : 'To be assigned at check-in';
 
                     // Format payment date
@@ -1276,8 +1328,8 @@ class Admin_Functions
 
                     // Get guest count information
                     $guestInfo = '';
-                    $adultCount = $info['adult'] ?? 1;
-                    $childrenCount = $info['children'] ?? 0;
+                    $adultCount = $info['adult_count'] ?? 1;
+                    $childrenCount = $info['children_count'] ?? 0;
                     $guestInfo = $adultCount . ' adult' . ($adultCount > 1 ? 's' : '');
                     if ($childrenCount > 0) {
                         $guestInfo .= ', ' . $childrenCount . ' child' . ($childrenCount > 1 ? 'ren' : '');
@@ -1292,13 +1344,16 @@ class Admin_Functions
 
                         // Booking Details Section
                         . "<p style=\"margin:0 0 12px;font-size:16px;\">Your booking details are as follows:</p>"
+                        . (!empty($assignedRooms) ? "<p style=\"margin:0 0 16px;font-size:16px;line-height:1.5;\">We are pleased to confirm that your selected room(s) <strong>" . htmlspecialchars($roomsText) . "</strong> have been successfully reserved.</p>" : "")
                         . "<div style=\"background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:20px;margin:20px 0;\">"
 
                         // Two-column layout for booking details
                         . "<table style=\"width:100%;border-collapse:collapse;\">"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Reference #</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($refNo) . "</td></tr>"
                         . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Check in</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($checkIn) . "</td></tr>"
                         . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Check out</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($checkOut) . "</td></tr>"
-                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Room</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomTypeInfo) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Room Type</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomTypeInfo) . "</td></tr>"
+                        . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Room Number(s)</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomsText) . "</td></tr>"
                         . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Breakfast</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">included</td></tr>"
                         . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\"># of Guests</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($guestInfo) . "</td></tr>"
                         . "<tr><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">Booked by</td><td style=\"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($customerName) . " (" . htmlspecialchars($customerEmail) . ")</td></tr>"
@@ -1321,11 +1376,96 @@ class Admin_Functions
 
                     $mailer = new SendEmail();
                     $email_status = $mailer->sendEmail($customerEmail, $subject, $emailBody) ? 'sent' : 'failed';
+
+                    // Also notify admin/employee about the approval (best-effort)
+                    try {
+                        $adminEmail = null;
+                        $adminName = '';
+                        if (!empty($adminId)) {
+                            $empStmt = $conn->prepare("SELECT employee_email, CONCAT(employee_fname, ' ', employee_lname) AS name FROM tbl_employees WHERE employee_id = :id LIMIT 1");
+                            $empStmt->execute([':id' => $adminId]);
+                            $emp = $empStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                            $adminEmail = $emp['employee_email'] ?? null;
+                            $adminName = $emp['name'] ?? '';
+                        }
+                        if (empty($adminEmail)) {
+                            $adminEmail = 'info@demirenhotel.com';
+                        }
+                        if (!empty($adminEmail)) {
+                            $adminSubject = 'Booking Approved - Demiren Hotel' . (!empty($refNo) ? ' - Ref ' . $refNo : '');
+                            $roomsTextForAdmin = !empty($assignedRooms) ? implode(', ', array_map('strval', $assignedRooms)) : '—';
+                            $adminBody = "<div style=\"font-family:Arial,sans-serif;color:#000;max-width:600px;margin:0 auto;background:#fff;\">"
+                                . "<div style=\"padding:20px;\">"
+                                . "<p style=\"margin:0 0 16px;font-size:16px;\">Hello " . htmlspecialchars($adminName ?: 'Team') . ",</p>"
+                                . "<p style=\"margin:0 0 16px;font-size:16px;\">A booking has been <strong>approved</strong>.</p>"
+                                . "<div style=\"background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:16px;margin:12px 0;\">"
+                                . "<table style=\"width:100%;border-collapse:collapse;\">"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Reference #</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($refNo) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Guest</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($customerName) . " (" . htmlspecialchars($customerEmail) . ")</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Check in</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($checkIn) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Check out</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($checkOut) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Room(s)</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomsTextForAdmin) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;font-size:14px;\">Total</td><td style=\"padding:6px 0;font-size:14px;font-weight:bold;\">₱" . number_format($totalAmount, 2) . "</td></tr>"
+                                . "</table>"
+                                . "</div>"
+                                . "<p style=\"margin:16px 0 0;font-size:16px;\">This is an automated notification.</p>"
+                                . "</div>"
+                                . "</div>";
+
+                            $adminMailer = new SendEmail();
+                            $adminMailer->sendEmail($adminEmail, $adminSubject, $adminBody);
+                        }
+                    } catch (Exception $_) {
+                        // ignore admin email issues
+                    }
                 } else {
                     $email_status = 'no_email';
+
+                    // Notify admin/employee about the approval even if customer email is missing (best-effort)
+                    try {
+                        $adminEmail = null;
+                        $adminName = '';
+                        if (!empty($adminId)) {
+                            $empStmt = $conn->prepare("SELECT employee_email, CONCAT(employee_fname, ' ', employee_lname) AS name FROM tbl_employees WHERE employee_id = :id LIMIT 1");
+                            $empStmt->execute([':id' => $adminId]);
+                            $emp = $empStmt->fetch(PDO::FETCH_ASSOC) ?: [];
+                            $adminEmail = $emp['employee_email'] ?? null;
+                            $adminName = $emp['name'] ?? '';
+                        }
+                        if (empty($adminEmail)) {
+                            $adminEmail = 'info@demirenhotel.com';
+                        }
+                        if (!empty($adminEmail)) {
+                            $adminSubject = 'Booking Approved - Demiren Hotel' . (!empty($refNo) ? ' - Ref ' . $refNo : '');
+                            $roomsTextForAdmin = !empty($assignedRooms) ? implode(', ', array_map('strval', $assignedRooms)) : '—';
+                            $adminBody = "<div style=\"font-family:Arial,sans-serif;color:#000;max-width:600px;margin:0 auto;background:#fff;\">"
+                                . "<div style=\"padding:20px;\">"
+                                . "<p style=\"margin:0 0 16px;font-size:16px;\">Hello " . htmlspecialchars($adminName ?: 'Team') . ",</p>"
+                                . "<p style=\"margin:0 0 16px;font-size:16px;\">A booking has been <strong>approved</strong>.</p>"
+                                . "<div style=\"background:#f9f9f9;border:1px solid #ddd;border-radius:8px;padding:16px;margin:12px 0;\">"
+                                . "<table style=\"width:100%;border-collapse:collapse;\">"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Reference #</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:bold;\">" . htmlspecialchars($refNo) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Guest</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($customerName) . " (" . htmlspecialchars($customerEmail) . ")</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Check in</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($checkIn) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Check out</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($checkOut) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">Room(s)</td><td style=\"padding:6px 0;border-bottom:1px solid #eee;font-size:14px;\">" . htmlspecialchars($roomsTextForAdmin) . "</td></tr>"
+                                . "<tr><td style=\"padding:6px 0;font-size:14px;\">Total</td><td style=\"padding:6px 0;font-size:14px;font-weight:bold;\">₱" . number_format($totalAmount, 2) . "</td></tr>"
+                                . "</table>"
+                                . "</div>"
+                                . "<p style=\"margin:16px 0 0;font-size:16px;\">This is an automated notification.</p>"
+                                . "</div>"
+                                . "</div>";
+
+                            $adminMailer = new SendEmail();
+                            $adminMailer->sendEmail($adminEmail, $adminSubject, $adminBody);
+                        }
+                    } catch (Exception $_) {
+                        // ignore admin email issues
+                    }
                 }
             } catch (Exception $e) {
                 // Ignore email issues; the booking approval already succeeded
+                error_log('approveCustomerBooking email error: ' . $e->getMessage());
                 $email_status = 'error';
             }
 
@@ -2330,6 +2470,41 @@ class Admin_Functions
         $stmt = $conn->prepare($sql);
         $stmt->execute();
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // Fetch rooms for a specific booking, including adult/children counts
+    function getBookingRoomsByBooking($data)
+    {
+        include "connection.php";
+        try {
+            $booking_id = intval(is_array($data) ? ($data["booking_id"] ?? 0) : 0);
+            if ($booking_id <= 0) {
+                return [];
+            }
+
+            $sql = "SELECT 
+                        br.booking_room_id,
+                        br.booking_id,
+                        br.roomtype_id,
+                        br.roomnumber_id,
+                        br.bookingRoom_adult,
+                        br.bookingRoom_children,
+                        rt.roomtype_name,
+                        rt.roomtype_price,
+                        r.roomfloor
+                    FROM tbl_booking_room br
+                    LEFT JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                    LEFT JOIN tbl_roomtype rt ON COALESCE(br.roomtype_id, r.roomtype_id) = rt.roomtype_id
+                    WHERE br.booking_id = :booking_id
+                    ORDER BY br.booking_room_id ASC";
+
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':booking_id', $booking_id, PDO::PARAM_INT);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Exception $e) {
+            return [];
+        }
     }
     
     function getAvailableCharges()
@@ -3948,31 +4123,50 @@ class Admin_Functions
         include "connection.php";
 
         try {
-            $sql = "SELECT 
-                        COUNT(r.roomnumber_id) as total_available_rooms,
-                        COUNT(CASE WHEN rt.roomtype_id = 1 THEN 1 END) as standard_twin_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 2 THEN 1 END) as single_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 3 THEN 1 END) as double_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 4 THEN 1 END) as triple_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 5 THEN 1 END) as quadruple_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 6 THEN 1 END) as family_a_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 7 THEN 1 END) as family_b_available,
-                        COUNT(CASE WHEN rt.roomtype_id = 8 THEN 1 END) as family_c_available
-                    FROM tbl_rooms r
-                    INNER JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
-                    WHERE r.room_status_id = 3
-                    AND r.roomnumber_id NOT IN (
-                        SELECT DISTINCT br.roomnumber_id
-                        FROM tbl_booking_room br
-                        INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
-                        WHERE b.booking_isArchive = 0
-                        AND b.booking_checkin_dateandtime <= NOW()
-                        AND b.booking_checkout_dateandtime >= NOW()
-                    )";
+            // 1) Total rooms per room type (from tbl_rooms)
+            $totalsSql = "SELECT roomtype_id, COUNT(*) AS total_rooms FROM tbl_rooms GROUP BY roomtype_id";
+            $totalsStmt = $conn->prepare($totalsSql);
+            $totalsStmt->execute();
+            $totals = [];
+            foreach ($totalsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $totals[(int)$row['roomtype_id']] = (int)$row['total_rooms'];
+            }
 
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            // 2) Currently booked rooms per room type (from tbl_booking_room for active bookings now)
+            $bookedSql = "SELECT br.roomtype_id, COUNT(*) AS booked_rooms
+                          FROM tbl_booking_room br
+                          GROUP BY br.roomtype_id";
+            $bookedStmt = $conn->prepare($bookedSql);
+            $bookedStmt->execute();
+            $booked = [];
+            foreach ($bookedStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $booked[(int)$row['roomtype_id']] = (int)$row['booked_rooms'];
+            }
+
+            // 3) Compute availability per room type = total - booked (never negative)
+            $availableByType = [];
+            $totalAvailableRooms = 0;
+            for ($id = 1; $id <= 8; $id++) {
+                $totalRooms = $totals[$id] ?? 0;
+                $bookedRooms = $booked[$id] ?? 0;
+                $available = max(0, $totalRooms - $bookedRooms);
+                $availableByType[$id] = $available;
+                $totalAvailableRooms += $available;
+            }
+
+            // Preserve existing field names used by the frontend, and include a by_roomtype map
+            $result = [
+                'total_available_rooms' => $totalAvailableRooms,
+                'standard_twin_available' => $availableByType[1] ?? 0,
+                'single_available' => $availableByType[2] ?? 0,
+                'double_available' => $availableByType[3] ?? 0,
+                'triple_available' => $availableByType[4] ?? 0,
+                'quadruple_available' => $availableByType[5] ?? 0,
+                'family_a_available' => $availableByType[6] ?? 0,
+                'family_b_available' => $availableByType[7] ?? 0,
+                'family_c_available' => $availableByType[8] ?? 0,
+                'by_roomtype' => $availableByType
+            ];
 
             return json_encode($result);
         } catch (PDOException $e) {
@@ -4371,12 +4565,12 @@ class Admin_Functions
                 a.billing_total_amount,
                 a.billing_balance,
                 a.billing_downpayment,
-                a.billing_created_at,
+                a.billing_dateandtime,
                 b.reference_no
             FROM tbl_billing a
             INNER JOIN tbl_booking b ON a.booking_id = b.booking_id
             WHERE b.reference_no = :reference_no
-            ORDER BY a.billing_created_at DESC";
+            ORDER BY a.billing_dateandtime DESC";
 
         $stmt = $conn->prepare($sql);
         $stmt->bindParam(':reference_no', $reference_no);
@@ -4703,9 +4897,11 @@ class Admin_Functions
 $AdminClass = new Admin_Functions();
 
 // Accept both "method" and "operation" for compatibility with various clients
-$methodType = $_POST["method"] ?? $_POST["operation"] ?? '';
-// Decode JSON payload if provided
-$jsonData = isset($_POST["json"]) ? json_decode($_POST["json"], true) : 0;
+$methodType = $_POST["method"] ?? $_POST["operation"] ?? $_GET["action"] ?? '';
+// Robust JSON parsing: support form 'json' and raw body fallback
+$jsonRaw = $_POST["json"] ?? file_get_contents('php://input');
+$jsonData = is_string($jsonRaw) && strlen(trim($jsonRaw)) > 0 ? json_decode($jsonRaw, true) : [];
+if (!is_array($jsonData)) { $jsonData = []; }
 
 // If no method provided, return error
 if (empty($methodType)) {
@@ -4757,6 +4953,10 @@ switch ($methodType) {
 
     case "viewBookingsCheckedInEnhanced":
         echo $AdminClass->viewCheckedInBookingsEnhanced();
+        break;
+
+    case "viewBookingsPendingEnhanced":
+        echo $AdminClass->viewPendingBookingsEnhanced();
         break;
 
     case "changeCustomerRoomsNumber":
@@ -4985,6 +5185,10 @@ switch ($methodType) {
 
     case "get_booking_rooms":
         echo json_encode($AdminClass->getBookingRooms());
+        break;
+
+    case "get_booking_rooms_by_booking":
+        echo json_encode($AdminClass->getBookingRoomsByBooking($jsonData));
         break;
 
     case "add_amenity_request":
