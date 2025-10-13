@@ -10,7 +10,7 @@ class SendEmail
     function sendEmail($emailToSent, $emailSubject, $emailBody)
     {
         // Load Composer's autoloader
-        require 'vendor/autoload.php';
+        require __DIR__ . '/vendor/autoload.php';
 
         // Create an instance; passing `true` enables exceptions
         $mail = new PHPMailer(true);
@@ -39,7 +39,7 @@ class SendEmail
             $mail->AltBody = 'This is the plain text version of the email.';
 
             $mail->send();
-            
+
             // Log success
             error_log("Email sent successfully to: " . $emailToSent);
             return true; // Success

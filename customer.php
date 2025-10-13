@@ -272,6 +272,18 @@ class Demiren_customer
         include "send_email.php";
         $json = json_decode($json, true);
 
+        $returnValueImage = uploadImage();
+        switch ($returnValueImage) {
+            case 2:
+                return 2; // invalid file type
+            case 3:
+                return 3; // upload error
+            case 4:
+                return 4; // file too big
+            default:
+                break;
+        }
+
         try {
             $conn->beginTransaction();
 
@@ -303,11 +315,11 @@ class Demiren_customer
             INSERT INTO tbl_booking 
                 (customers_id, customers_walk_in_id, guests_amnt, booking_downpayment, 
                 booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
-                booking_totalAmount, booking_isArchive, reference_no) 
+                booking_totalAmount, booking_isArchive, reference_no, booking_fileName) 
             VALUES 
                 (NULL, :walkin_id, :guestTotal, :downpayment, 
                 :checkin, :checkout, NOW(), 
-                :totalAmount, 0, :reference_no)
+                :totalAmount, 0, :reference_no, :file)
         ");
             $stmt->bindParam(":walkin_id", $walkInCustomerId);
             $stmt->bindParam(":guestTotal", $totalGuests);
@@ -316,6 +328,7 @@ class Demiren_customer
             $stmt->bindParam(":checkout", $checkOut);
             $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
             $stmt->bindParam(":reference_no", $referenceNo);
+            $stmt->bindParam(":file", $returnValueImage);
             $stmt->execute();
             $bookingId = $conn->lastInsertId();
 
@@ -374,9 +387,8 @@ class Demiren_customer
                 // Add extra bed charge if applicable
                 if (isset($room["bedCount"]) && $room["bedCount"] > 0) {
                     $totalCharges = $room["bedCount"] * 400;
-                    $sql = "INSERT INTO tbl_booking_charges
-                    (charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total)
-                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total)";
+                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total, booking_charge_status)
+                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total, 2)";
                     $stmt = $conn->prepare($sql);
                     $stmt->bindParam(":booking_room_id", $bookingRoomId);
                     $stmt->bindParam(":booking_charges_quantity", $room["bedCount"]);
@@ -672,8 +684,10 @@ class Demiren_customer
             $bookingId = $row['booking_id'];
 
             if (!isset($bookings[$bookingId])) {
+                $balance = $this->getCurrentBalance($bookingId);
                 $bookings[$bookingId] = [
                     "booking_id" => $row['booking_id'],
+                    "balance" => $balance,
                     "booking_totalAmount" => $row['booking_totalAmount'],
                     "customers_id" => $row['customers_id'],
                     "customers_walk_in_id" => $row['customers_walk_in_id'],
@@ -952,31 +966,6 @@ class Demiren_customer
         return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
     }
 
-    function getOnlineCustomers()
-    {
-        include "connection.php";
-        $sql = "SELECT 
-                    co.customers_online_id,
-                    co.customers_online_username,
-                    co.customers_online_email,
-                    co.customers_online_phone,
-                    co.customers_online_created_at,
-                    CASE WHEN co.customers_online_status IN ('active','authenticated','1','true') THEN 1 ELSE 0 END AS customers_online_authentication_status,
-                    co.customers_online_profile_image,
-                    c.customers_id,
-                    c.customers_fname,
-                    c.customers_lname,
-                    c.customers_birthdate,
-                    c.customers_email AS customers_email,
-                    c.customers_phone AS customers_phone
-                FROM tbl_customers_online co
-                LEFT JOIN tbl_customers c ON c.customers_online_id = co.customers_online_id
-                ORDER BY co.customers_online_created_at DESC";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute();
-        return $stmt->rowCount() > 0 ? $stmt->fetchAll(PDO::FETCH_ASSOC) : 0;
-    }
-
     function customerRegistration($json)
     {
         include "connection.php";
@@ -1215,6 +1204,17 @@ class Demiren_customer
         // yessssss
         include "connection.php";
         $json = json_decode($json, true);
+        $returnValueImage = uploadImage();
+        switch ($returnValueImage) {
+            case 2:
+                return 2; // invalid file type
+            case 3:
+                return 3; // upload error
+            case 4:
+                return 4; // file too big
+            default:
+                break;
+        }
 
         try {
             $conn->beginTransaction();
@@ -1229,16 +1229,17 @@ class Demiren_customer
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
                 (customers_id, guests_amnt, customers_walk_in_id, booking_downpayment, 
-                booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_totalAmount) 
+                booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_totalAmount, booking_fileName) 
             VALUES 
                 (:customers_id, :guestTotalAmount, NULL, :booking_downpayment, 
-                :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :totalAmount)");
+                :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :totalAmount, :file)");
             $stmt->bindParam(":customers_id", $customerId);
-            $stmt->bindParam(":booking_downpayment", $bookingDetails["downpayment"]);
+            $stmt->bindParam(":booking_downpayment", $bookingDetails["totalPay"]);
             $stmt->bindParam(":booking_checkin_dateandtime", $checkIn);
             $stmt->bindParam(":booking_checkout_dateandtime", $checkOut);
             $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
             $stmt->bindParam(":guestTotalAmount", $totalGuests);
+            $stmt->bindParam(":file", $returnValueImage);
             $stmt->execute();
             $bookingId = $conn->lastInsertId();
 
@@ -1293,8 +1294,8 @@ class Demiren_customer
                 $bookingRoomId = $conn->lastInsertId();
                 if ($room["bedCount"] > 0) {
                     $totalCharges = $room["bedCount"] * 400;
-                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total)
-                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total)";
+                    $sql = "INSERT INTO tbl_booking_charges(charges_master_id, booking_room_id, booking_charges_price, booking_charges_quantity, booking_charges_total, booking_charge_status)
+                    VALUES (2, :booking_room_id, 400, :booking_charges_quantity, :booking_charges_total, 2)";
                     $stmt = $conn->prepare($sql);
                     $stmt->bindParam(":booking_room_id", $bookingRoomId);
                     $stmt->bindParam(":booking_charges_quantity", $room["bedCount"]);
@@ -1433,7 +1434,7 @@ class Demiren_customer
             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
             LEFT JOIN tbl_rooms d ON d.roomnumber_id = b.roomnumber_id
             LEFT JOIN tbl_booking_history e ON e.booking_id = a.booking_id
-            LEFT JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
+            INNER JOIN tbl_booking_status f ON f.booking_status_id = e.status_id
             WHERE a.customers_id = :bookingCustomerId
             AND a.booking_isArchive = 0
             ORDER BY a.booking_id DESC";
@@ -1669,61 +1670,7 @@ class Demiren_customer
             }
         }
 
-        // If not found in customers, try to find in tbl_employee (Employee/Admin login)
-        // Only allow employees with boolean status = 1 (Active) to log in
-        $sql = "SELECT e.*, ul.userlevel_name 
-                FROM tbl_employee e 
-                LEFT JOIN tbl_user_level ul ON e.employee_user_level_id = ul.userlevel_id 
-                WHERE e.employee_username = :employee_username AND e.employee_status = 1";
-        $stmt = $conn->prepare($sql);
-        $stmt->bindParam(":employee_username", $data["username"]);
-        $stmt->execute();
-
-        $employee = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($employee) {
-            $storedPassword = $employee["employee_password"];
-            $inputPassword = $data["password"];
-
-            // Check if the stored password is hashed (starts with $2y$)
-            if (password_get_info($storedPassword)['algo'] !== null) {
-                // Password is hashed, use password_verify
-                if (password_verify($inputPassword, $storedPassword)) {
-                    // Remove password from returned data for security
-                    unset($employee["employee_password"]);
-                    return [
-                        "success" => true,
-                        "user" => $employee,
-                        "user_type" => $employee["userlevel_name"] === "Admin" ? "admin" : "employee"
-                    ];
-                }
-            } else {
-                // Password is plain text (legacy), compare directly
-                if ($inputPassword === $storedPassword) {
-                    // Remove password from returned data for security
-                    unset($employee["employee_password"]);
-                    return [
-                        "success" => true,
-                        "user" => $employee,
-                        "user_type" => $employee["userlevel_name"] === "Admin" ? "admin" : "employee"
-                    ];
-                }
-            }
-        }
-
-        // If employee not found as active, check if an employee exists but is inactive for clearer messaging
-        $checkEmpSql = "SELECT employee_status FROM tbl_employee WHERE employee_username = :employee_username LIMIT 1";
-        $checkEmpStmt = $conn->prepare($checkEmpSql);
-        $checkEmpStmt->bindParam(":employee_username", $data["username"]);
-        $checkEmpStmt->execute();
-        $existingEmp = $checkEmpStmt->fetch(PDO::FETCH_ASSOC);
-        if ($existingEmp && (int)$existingEmp["employee_status"] === 0) {
-            return [
-                "success" => false,
-                "message" => "Your employee account is inactive. Please contact the administrator."
-            ];
-        }
-
+        // Employee/Admin login removed: API now only supports customer login
         // Check if username exists in customers_online table but no online account
         $checkCustomerSql = "SELECT customers_online_id FROM tbl_customers_online WHERE customers_online_username = :username";
         $checkCustomerStmt = $conn->prepare($checkCustomerSql);
@@ -1882,6 +1829,14 @@ class Demiren_customer
             $stmt->bindParam(":email", $data["guest_email"]);
             $stmt->execute();
 
+            // check if username exists in tbl_customers
+            if (recordExists($data["username"], "tbl_customers_online", "customers_online_username")) {
+                return json_encode([
+                    "success" => false,
+                    "message" => "Username already exists."
+                ]);
+            }
+
             if ($stmt->rowCount() > 0) {
                 return json_encode([
                     "success" => false,
@@ -1986,6 +1941,64 @@ class Demiren_customer
         }
     }
 
+    function checkUsernameExists($json)
+    {
+        include "connection.php";
+        $data = json_decode($json, true);
+
+        try {
+            // Check if username already exists in tbl_customers_online
+            $sql = "SELECT customers_online_id 
+                    FROM tbl_customers_online 
+                    WHERE customers_online_username = :username 
+                    LIMIT 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":username", $data["username"]);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+                return json_encode([
+                    "success" => false,
+                    "exists" => true,
+                    "message" => "Username already exists. Please choose a different username."
+                ]);
+            }
+
+            // Also check if username exists in employee table (to avoid conflicts)
+            $sql = "SELECT employee_id 
+                    FROM tbl_employee 
+                    WHERE employee_username = :username 
+                    LIMIT 1";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":username", $data["username"]);
+            $stmt->execute();
+
+            if ($stmt->rowCount() > 0) {
+                return json_encode([
+                    "success" => false,
+                    "exists" => true,
+                    "message" => "Username already exists. Please choose a different username."
+                ]);
+            }
+
+            return json_encode([
+                "success" => true,
+                "exists" => false,
+                "message" => "Username is available."
+            ]);
+        } catch (PDOException $e) {
+            return json_encode([
+                "success" => false,
+                "message" => "Database error: " . $e->getMessage()
+            ]);
+        } catch (Exception $e) {
+            return json_encode([
+                "success" => false,
+                "message" => "Error: " . $e->getMessage()
+            ]);
+        }
+    }
+
     function getAmenitiesMaster()
     {
         include "connection.php";
@@ -2010,14 +2023,21 @@ class Demiren_customer
 
         $charges = $data["charges"];
         $bookingId = $data["bookingId"];
+        $notes = $data["notes"];
 
         try {
             $conn->beginTransaction();
 
+            $sql = "INSERT INTO tbl_booking_charges_notes(booking_c_notes)
+                    VALUES (:booking_c_notes)";
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(":booking_c_notes", $notes);
+            $stmt->execute();
+            $lastInsertId = $conn->lastInsertId();
             $sqlInsert = "INSERT INTO tbl_booking_charges 
-            (booking_room_id, charges_master_id, booking_charges_quantity, booking_charges_price)
+            (booking_room_id, charges_master_id, booking_charges_quantity, booking_charges_price, booking_charges_notes_id )
             VALUES 
-            (:booking_room_id, :charges_master_id, :charges_quantity, :booking_charges_price)";
+            (:booking_room_id, :charges_master_id, :charges_quantity, :booking_charges_price, :booking_c_notes_id)";
             $stmtInsert = $conn->prepare($sqlInsert);
 
             $totalPrice = 0;
@@ -2026,6 +2046,7 @@ class Demiren_customer
                 $stmtInsert->bindParam(":charges_master_id", $charge["charges_master_id"]);
                 $stmtInsert->bindParam(":charges_quantity", $charge["charges_quantity"]);
                 $stmtInsert->bindParam(":booking_charges_price", $charge["booking_charges_price"]);
+                $stmtInsert->bindParam(":booking_c_notes_id", $lastInsertId);
                 $stmtInsert->execute();
 
                 $totalPrice += $charge["booking_charges_price"];
@@ -2173,9 +2194,131 @@ class Demiren_customer
     //         return 0;
     //     }
     // }
+
+    function getCurrentBalance($bookingId)
+    {
+        include "connection.php";
+
+        $sql = "
+        SELECT billing_balance 
+        FROM tbl_billing 
+        WHERE booking_id = :bookingId 
+        ORDER BY billing_id DESC 
+        LIMIT 1
+    ";
+
+        $stmt = $conn->prepare($sql);
+        $stmt->bindParam(':bookingId', $bookingId, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $result ? $result['billing_balance'] : 0;
+    }
+
+
+    function sendMessageEmail($json)
+    {
+        include "connection.php";
+        include "send_email.php";
+        $data = json_decode($json, true);
+        $emailToSent = "xmelmacario@gmail.com";
+        $guestEmail = $data["email"];
+        $message = $data["message"];
+        $name = $data["name"];
+
+        $emailBody = '
+        <html>
+        <head>
+        <style>
+            body { font-family: Arial, sans-serif; color: #333; background-color: #f9f9f9; padding: 20px; }
+            .container { background-color: #fff; border-radius: 10px; padding: 20px; max-width: 600px; margin: auto; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            h2 { color: #1a73e8; }
+            .details { margin-top: 20px; }
+            .label { font-weight: bold; color: #555; }
+            .value { margin-bottom: 10px; }
+            .code { font-size: 20px; font-weight: bold; color: #444; background: #f0f0f0; padding: 10px; border-radius: 5px; text-align: center; margin: 20px 0; }
+            .footer { font-size: 12px; color: #777; margin-top: 30px; text-align: center; }
+        </style>
+        </head>
+        <body>
+        <div class="container">
+
+            <div class="details">
+            <p><span class="label">Customer Name:</span> ' . $name . '</p>
+            <p><span class="label">Guest Email:</span> ' . $guestEmail . '</p>
+            <p><span class="label">Message:</span> ' . $message . '</p>
+            </div>
+
+            <div class="footer">
+            This is an automated message. Please do not reply to this email.
+            </div>
+        </div>
+        </body>
+        </html>';
+        $sendEmail = new SendEmail();
+        return $sendEmail->sendEmail($emailToSent, "Customer Question", $emailBody);
+    }
 } //customer
 
+function recordExists($value, $table, $column)
+{
+    include "connection.php";
+    $sql = "SELECT COUNT(*) FROM $table WHERE $column = :value";
+    $stmt = $conn->prepare($sql);
+    $stmt->bindParam(":value", $value);
+    $stmt->execute();
+    $count = $stmt->fetchColumn();
+    return $count > 0;
+}
 
+function uploadImage()
+{
+    if (isset($_FILES["file"])) {
+        $file = $_FILES['file'];
+        // print_r($file);
+        $fileName = $_FILES['file']['name'];
+        $fileTmpName = $_FILES['file']['tmp_name'];
+        $fileSize = $_FILES['file']['size'];
+        $fileError = $_FILES['file']['error'];
+        // $fileType = $_FILES['file']['type'];
+
+        $fileExt = explode(".", $fileName);
+        $fileActualExt = strtolower(end($fileExt));
+
+        $allowed = ["jpg", "jpeg", "png"];
+
+        if (in_array($fileActualExt, $allowed)) {
+            if ($fileError === 0) {
+                if ($fileSize < 25000000) {
+                    $fileNameNew = uniqid("", true) . "." . $fileActualExt;
+                    $fileDestination =  'images/' . $fileNameNew;
+                    move_uploaded_file($fileTmpName, $fileDestination);
+                    return $fileNameNew;
+                } else {
+                    return 4;
+                }
+            } else {
+                return 3;
+            }
+        } else {
+            return 2;
+        }
+    } else {
+        return "";
+    }
+
+    // $returnValueImage = uploadImage();
+    // switch ($returnValueImage) {
+    //   case 2:
+    //     return 2; // invalid file type
+    //   case 3:
+    //     return 3; // upload error
+    //   case 4:
+    //     return 4; // file too big
+    //   default:
+    //     break;
+    // }
+}
 
 
 $json = isset($_POST["json"]) ? $_POST["json"] : "0";
@@ -2226,9 +2369,6 @@ switch ($operation) {
         break;
     case "getFeedbacks":
         echo json_encode($demiren_customer->getFeedbacks());
-        break;
-    case "getOnlineCustomers":
-        echo json_encode($demiren_customer->getOnlineCustomers());
         break;
     case "customerRegistration":
         echo $demiren_customer->customerRegistration($json);
@@ -2292,6 +2432,9 @@ switch ($operation) {
         break;
     case "cancelReqAmenities":
         echo json_encode($demiren_customer->cancelReqAmenities($json));
+        break;
+    case "sendMessageEmail":
+        echo $demiren_customer->sendMessageEmail($json);
         break;
     // case "getRoomImages":
     //     echo json_encode($demiren_customer->getRoomImages($json));

@@ -427,6 +427,23 @@ class Admin_Functions
         }
     }
 
+    // Filtered enhanced booking list: only latest status 'Checked-In'
+    function viewCheckedInBookingsEnhanced()
+    {
+        try {
+            $all = json_decode($this->viewBookingListEnhanced(), true);
+            if (!is_array($all)) {
+                return json_encode([]);
+            }
+            $filtered = array_values(array_filter($all, function($row) {
+                return isset($row['booking_status']) && $row['booking_status'] === 'Checked-In';
+            }));
+            return json_encode($filtered);
+        } catch (Exception $e) {
+            return json_encode(["error" => $e->getMessage()]);
+        }
+    }
+
     function changeBookingStatus($data)
     {
         include 'connection.php';
@@ -435,7 +452,19 @@ class Admin_Functions
 
             $book_id = intval($data["booking_id"]);
             $status_id = intval($data["booking_status_id"]);
-            $employee_id = intval($data["employee_id"] ?? 1); // Default to admin if not provided
+            $employee_id = isset($data["employee_id"]) ? intval($data["employee_id"]) : null;
+            if (empty($employee_id) || $employee_id <= 0) {
+                $conn->rollBack();
+                return json_encode(["success" => false, "message" => "Missing or invalid employee_id"]);
+            }
+            $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+            $empStmt->bindParam(":employee_id", $employee_id, PDO::PARAM_INT);
+            $empStmt->execute();
+            $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+                $conn->rollBack();
+                return json_encode(["success" => false, "message" => "Employee is not active"]);
+            }
             $room_ids = $data["room_ids"] ?? []; // Array of room IDs to update
 
             // 1. Insert booking history record
@@ -835,9 +864,13 @@ class Admin_Functions
                 VALUES (:booking_id, :employee_id, :status_id, NOW())");
             $stmt->execute([
                 ':booking_id' => $bookingId,
-                ':employee_id' => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
+                ':employee_id' => (isset($data['employee_id']) && intval($data['employee_id']) > 0) ? intval($data['employee_id']) : null,
                 ':status_id' => 5 // Checked-In
             ]);
+            if (!isset($data['employee_id']) || intval($data['employee_id']) <= 0) {
+                $conn->rollBack();
+                return json_encode(['status' => 'error', 'message' => 'Missing or invalid employee_id']);
+            }
 
             // 6. Assign rooms and update their status to Occupied
             foreach ($data['selectedRooms'] as $room) {
@@ -870,7 +903,7 @@ class Admin_Functions
             )");
             $stmt->execute([
                 ':booking_id' => $bookingId,
-                ':employee_id' => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
+                ':employee_id' => (isset($data['employee_id']) && intval($data['employee_id']) > 0) ? intval($data['employee_id']) : null,
                 ':payment_method_id' => 2, // Cash (from tbl_payment_method, adjust if needed)
                 ':invoice_number' => $reference_no,
                 ':downpayment' => $data['payment']['amountPaid'],
@@ -878,6 +911,10 @@ class Admin_Functions
                 ':total_amount' => $data['billing']['total'],
                 ':balance' => $data['billing']['total'] - $data['payment']['amountPaid'] // Calculate remaining balance
             ]);
+            if (!isset($data['employee_id']) || intval($data['employee_id']) <= 0) {
+                $conn->rollBack();
+                return json_encode(['status' => 'error', 'message' => 'Missing or invalid employee_id']);
+            }
 
             $conn->commit();
             return json_encode([
@@ -1008,7 +1045,8 @@ class Admin_Functions
 
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = $data['admin_id']; // placeholder
+        // Accept user_id (front desk or employee) instead of admin_id
+        $adminId   = $data['user_id'] ?? $data['admin_id'] ?? null; // employee_id/user_id
 
         try {
             $conn->beginTransaction();
@@ -1131,6 +1169,7 @@ class Admin_Functions
             $conn->commit();
 
             // Send approval email to the customer (best-effort; errors are ignored)
+            $email_status = 'skipped';
             try {
                 // Get customer contact, booking info, and payment details
                 $infoStmt = $conn->prepare("SELECT 
@@ -1281,13 +1320,16 @@ class Admin_Functions
                         . "</div>";
 
                     $mailer = new SendEmail();
-                    $mailer->sendEmail($customerEmail, $subject, $emailBody);
+                    $email_status = $mailer->sendEmail($customerEmail, $subject, $emailBody) ? 'sent' : 'failed';
+                } else {
+                    $email_status = 'no_email';
                 }
             } catch (Exception $e) {
                 // Ignore email issues; the booking approval already succeeded
+                $email_status = 'error';
             }
 
-            echo json_encode(["success" => true, "message" => "Booking approved successfully."]);
+            echo json_encode(["success" => true, "message" => "Booking approved successfully.", "email_status" => $email_status]);
         } catch (Exception $e) {
             $conn->rollBack();
             echo json_encode(["success" => false, "message" => $e->getMessage()]);
@@ -1300,7 +1342,8 @@ class Admin_Functions
 
         $bookingId = $data['booking_id'];
         $roomIds   = $data['room_ids']; // array of room IDs
-        $adminId   = $data['admin_id']; // placeholder
+        // Accept user_id (front desk or employee) instead of admin_id
+        $adminId   = $data['user_id'] ?? $data['admin_id'] ?? null; // employee_id/user_id
 
         try {
             $conn->beginTransaction();
@@ -1580,7 +1623,20 @@ class Admin_Functions
         }
 
         $booking_id = $booking['booking_id'];
-        $employee_id = 1; // Replace with session
+        $employee_id = isset($json['employee_id']) ? intval($json['employee_id']) : null;
+
+        if (empty($employee_id) || $employee_id <= 0) {
+            echo 'invalid_employee';
+            return;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+            echo 'invalid_employee';
+            return;
+        }
 
         // Assign rooms to booking_room
         foreach ($selected_room_ids as $room_id) {
@@ -1763,6 +1819,23 @@ class Admin_Functions
             $booking_charges_id = $conn->lastInsertId();
 
             // Step 2: Insert into tbl_billing
+            // Validate employee_id before billing
+            $employee_id = isset($data['employee_id']) ? intval($data['employee_id']) : null;
+            if (empty($employee_id) || $employee_id <= 0) {
+                $conn->rollBack();
+                echo json_encode(["status" => "error", "message" => "Missing or invalid employee_id"]);
+                return;
+            }
+            $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+            $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+            $empStmt->execute();
+            $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+                $conn->rollBack();
+                echo json_encode(["status" => "error", "message" => "Employee is not active"]);
+                return;
+            }
+
             $sql2 = "INSERT INTO tbl_billing (
                     booking_id,
                     booking_charges_id,
@@ -1791,7 +1864,7 @@ class Admin_Functions
             $stmt2->execute([
                 ':booking_id'          => $booking_id,
                 ':booking_charges_id'  => $booking_charges_id,
-                ':employee_id'         => isset($data['employee_id']) ? (int)$data['employee_id'] : 1,
+                ':employee_id'         => $employee_id,
                 ':payment_method_id'   => $payment_method_id,
                 ':invoice_number'      => "0001", // or generate dynamically
                 ':downpayment'         => $charge_price, // can be customized
@@ -2271,7 +2344,6 @@ class Admin_Functions
                     cc.charges_category_name
                 FROM tbl_charges_master cm
                 LEFT JOIN tbl_charges_category cc ON cm.charges_category_id = cc.charges_category_id
-                WHERE cm.charges_master_status_id = 1
                 ORDER BY cc.charges_category_name, cm.charges_master_name";
 
         $stmt = $conn->prepare($sql);
@@ -2285,7 +2357,17 @@ class Admin_Functions
         // $data is already an array from the switch statement
 
         $request_id = $data['request_id'];
-        $employee_id = $data['employee_id'] ?? 1; // Default to admin
+        $employee_id = isset($data['employee_id']) ? intval($data['employee_id']) : null;
+        if (empty($employee_id) || $employee_id <= 0) {
+            return 0;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+            return 0;
+        }
         $admin_notes = $data['admin_notes'] ?? '';
 
         try {
@@ -2310,7 +2392,17 @@ class Admin_Functions
         // $data is already an array from the switch statement
 
         $request_id = $data['request_id'];
-        $employee_id = $data['employee_id'] ?? 1; // Default to admin
+        $employee_id = isset($data['employee_id']) ? intval($data['employee_id']) : null;
+        if (empty($employee_id) || $employee_id <= 0) {
+            return 0;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+            return 0;
+        }
         $admin_notes = $data['admin_notes'] ?? '';
 
         try {
@@ -3816,16 +3908,22 @@ class Admin_Functions
         include "connection.php";
 
         try {
-            // Count only active bookings that don't have invoices (not checked out)
+            // Count bookings with latest status name 'Checked-In' using the same latest-status logic as viewBookingListEnhanced
             $sql = "SELECT 
-                        COUNT(DISTINCT b.booking_id) as active_bookings_count
+                        COUNT(*) AS active_bookings_count
                     FROM tbl_booking b
-                    LEFT JOIN tbl_billing bl ON b.booking_id = bl.booking_id
-                    LEFT JOIN tbl_invoice i ON bl.billing_id = i.billing_id
+                    LEFT JOIN (
+                        SELECT bh1.booking_id, bs.booking_status_name
+                        FROM tbl_booking_history bh1
+                        INNER JOIN (
+                            SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                            FROM tbl_booking_history
+                            GROUP BY booking_id
+                        ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                        INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+                    ) bs ON bs.booking_id = b.booking_id
                     WHERE b.booking_isArchive = 0
-                    AND b.booking_checkin_dateandtime <= NOW()  
-                    AND b.booking_checkout_dateandtime >= NOW()
-                    AND i.invoice_id IS NULL";
+                      AND COALESCE(bs.booking_status_name, 'Pending') = 'Checked-In'";
 
             $stmt = $conn->prepare($sql);
             $stmt->execute();
@@ -4657,6 +4755,10 @@ switch ($methodType) {
         echo $AdminClass->viewBookingListEnhanced();
         break;
 
+    case "viewBookingsCheckedInEnhanced":
+        echo $AdminClass->viewCheckedInBookingsEnhanced();
+        break;
+
     case "changeCustomerRoomsNumber":
         echo $AdminClass->changeCustomerRoomsNumber($jsonData);
         break;
@@ -4908,19 +5010,19 @@ switch ($methodType) {
         echo $AdminClass->getVisitorApprovalStatuses();
         break;
 
-    case "get_visitor_logs":
+    case "getVisitorLogs":
         echo $AdminClass->getVisitorLogs();
         break;
 
-    case "add_visitor_log":
+    case "addVisitorLog":
         echo $AdminClass->addVisitorLog();
         break;
 
-    case "update_visitor_log":
+    case "updateVisitorLog":
         echo $AdminClass->updateVisitorLog();
         break;
 
-    case "set_visitor_approval":
+    case "setVisitorApproval":
         echo $AdminClass->setVisitorApproval();
         break;
 

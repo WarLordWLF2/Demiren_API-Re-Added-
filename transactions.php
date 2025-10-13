@@ -60,7 +60,21 @@ class Transactions
         }
 
         $booking_id = $booking['booking_id'];
-        $employee_id = 1; // Replace with session
+        $employee_id = isset($json['employee_id']) ? intval($json['employee_id']) : null;
+
+        // Safeguards: require valid employee_id and validate active
+        if (empty($employee_id) || $employee_id <= 0) {
+            echo 'invalid_employee';
+            return;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+            echo 'invalid_employee';
+            return;
+        }
 
         // Assign rooms to booking_room
         foreach ($selected_room_ids as $room_id) {
@@ -332,18 +346,42 @@ class Transactions
     }
 
 
+
     function createInvoice($json)
     {
         include "connection.php";
         $json = json_decode($json, true);
-        $billing_ids = $json["billing_ids"];
-        $employee_id = $json["employee_id"];
-        $payment_method_id = $json["payment_method_id"];
+        $billing_ids = isset($json["billing_ids"]) && is_array($json["billing_ids"]) ? $json["billing_ids"] : [];
+        $employee_id = isset($json["employee_id"]) ? intval($json["employee_id"]) : null;
+        $payment_method_id = $json["payment_method_id"] ?? 2; // Default to Cash
         $invoice_status_id = 1; // Always set to Complete for checkout scenarios
         $discount_id = $json["discount_id"] ?? null;
         $vat_rate = $json["vat_rate"] ?? 0.12; // Default 12% VAT
         $downpayment = $json["downpayment"] ?? 0;
-
+    
+        // Safeguards: ensure billing_ids present and employee_id valid; validate employee exists and is active
+        if (empty($billing_ids)) {
+            echo json_encode(["success" => false, "message" => "Missing required field: billing_ids"]);
+            return;
+        }
+        if (empty($employee_id) || $employee_id <= 0) {
+            echo json_encode(["success" => false, "message" => "Missing or invalid employee_id"]);
+            return;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow) {
+            echo json_encode(["success" => false, "message" => "Employee not found"]);
+            return;
+        }
+        $status = $empRow["employee_status"];
+        if ($status === 'Inactive' || $status === 'Disabled' || $status === '0' || $status === 0) {
+            echo json_encode(["success" => false, "message" => "Employee is not active"]);
+            return;
+        }
+    
         $invoice_date = date("Y-m-d");
         $invoice_time = date("H:i:s");
         $results = [];
@@ -644,10 +682,33 @@ class Transactions
         include "connection.php";
         $json = json_decode($json, true);
         $booking_id = $json["booking_id"];
-        $employee_id = $json["employee_id"] ?? 1;
+        $employee_id = isset($json["employee_id"]) ? intval($json["employee_id"]) : null;
         $payment_method_id = $json["payment_method_id"] ?? 2; // Default to Cash
         $discount_id = $json["discount_id"] ?? null;
         $vat_rate = $json["vat_rate"] ?? 0.12; // Default 12% VAT
+
+        // Safeguards: require valid employee_id and booking_id; validate employee exists and is active
+        if (empty($booking_id)) {
+            echo json_encode(["success" => false, "message" => "Missing required field: booking_id"]);
+            return;
+        }
+        if (empty($employee_id) || $employee_id <= 0) {
+            echo json_encode(["success" => false, "message" => "Missing or invalid employee_id"]);
+            return;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow) {
+            echo json_encode(["success" => false, "message" => "Employee not found"]);
+            return;
+        }
+        $status = $empRow["employee_status"];
+        if ($status === 'Inactive' || $status === 'Disabled' || $status === '0' || $status === 0) {
+            echo json_encode(["success" => false, "message" => "Employee is not active"]);
+            return;
+        }
 
         try {
             // Check if billing already exists
@@ -926,12 +987,25 @@ class Transactions
         $charge_price = $json["charge_price"];
         $quantity = $json["quantity"] ?? 1;
         $category_id = $json["category_id"] ?? 4; // Default to "Additional Services"
-        $employee_id = $json["employee_id"] ?? 1;
+        $employee_id = isset($json["employee_id"]) ? intval($json["employee_id"]) : null;
+
+        if (empty($employee_id) || $employee_id <= 0) {
+            echo json_encode(["success" => false, "message" => "Missing or invalid employee_id"]);
+            return;
+        }
+        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+        $empStmt->execute();
+        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+            echo json_encode(["success" => false, "message" => "Employee is not active"]);
+            return;
+        }
 
         try {
             // Get the first booking room for this booking
             $roomQuery = $conn->prepare("SELECT booking_room_id FROM tbl_booking_room WHERE booking_id = :booking_id LIMIT 1");
-            $roomQuery->bindParam(':booking_id', $booking_id);
+            $roomQuery->bindParam(':booking_room_id', $booking_id);
             $roomQuery->execute();
             $roomData = $roomQuery->fetch(PDO::FETCH_ASSOC);
 
