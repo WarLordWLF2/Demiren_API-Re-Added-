@@ -125,7 +125,7 @@ class Admin_Functions
         include "connection.php";
 
         try {
-            // First, get all rooms with their basic information
+            // First, get all rooms with their basic information (do not exclude rooms with future bookings)
             $sql = "SELECT 
                         r.roomnumber_id,
                         r.room_status_id, 
@@ -145,14 +145,6 @@ class Admin_Functions
                         ON r.room_status_id = st.status_id
                     LEFT JOIN tbl_imagesroommaster img 
                         ON r.roomtype_id = img.roomtype_id
-                    WHERE NOT EXISTS (
-                        SELECT 1
-                        FROM tbl_booking_room br
-                        JOIN tbl_booking b ON b.booking_id = br.booking_id
-                        WHERE br.roomnumber_id = r.roomnumber_id
-                          AND b.booking_isArchive = 0
-                          AND DATE(b.booking_checkout_dateandtime) >= CURDATE()
-                    )
                     GROUP BY 
                         r.roomnumber_id,
                         r.roomfloor,
@@ -190,7 +182,7 @@ class Admin_Functions
                             LEFT JOIN tbl_customers_walk_in w 
                                 ON b.customers_walk_in_id = w.customers_walk_in_id
                             WHERE b.booking_isArchive = 0
-                                AND b.booking_checkin_dateandtime >= CURDATE()
+                                AND DATE(b.booking_checkout_dateandtime) >= CURDATE()
                             ORDER BY br.roomnumber_id, b.booking_checkin_dateandtime ASC";
 
             $stmt_bookings = $conn->prepare($sql_bookings);
@@ -4118,43 +4110,94 @@ class Admin_Functions
         }
     }
 
-    function getAvailableRoomsCount()
+    function getAvailableRoomsCount($data)
     {
         include "connection.php";
 
         try {
-            // 1) Total rooms per room type (from tbl_rooms)
-            $totalsSql = "SELECT roomtype_id, COUNT(*) AS total_rooms FROM tbl_rooms GROUP BY roomtype_id";
-            $totalsStmt = $conn->prepare($totalsSql);
-            $totalsStmt->execute();
-            $totals = [];
-            foreach ($totalsStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $totals[(int)$row['roomtype_id']] = (int)$row['total_rooms'];
+            // Parse optional date range from $data (array or JSON string)
+            $checkIn = null;
+            $checkOut = null;
+            if (is_array($data)) {
+                $checkIn = $data['check_in'] ?? null;
+                $checkOut = $data['check_out'] ?? null;
+            } else if (is_string($data)) {
+                $parsed = json_decode($data, true);
+                if (is_array($parsed)) {
+                    $checkIn = $parsed['check_in'] ?? null;
+                    $checkOut = $parsed['check_out'] ?? null;
+                }
             }
 
-            // 2) Currently booked rooms per room type (from tbl_booking_room for active bookings now)
-            $bookedSql = "SELECT br.roomtype_id, COUNT(*) AS booked_rooms
-                          FROM tbl_booking_room br
-                          GROUP BY br.roomtype_id";
-            $bookedStmt = $conn->prepare($bookedSql);
-            $bookedStmt->execute();
-            $booked = [];
-            foreach ($bookedStmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
-                $booked[(int)$row['roomtype_id']] = (int)$row['booked_rooms'];
+            $hasDates = !empty($checkIn) && !empty($checkOut);
+
+            if ($hasDates) {
+                // Overlap logic: existing booking [b.checkin, b.checkout) overlaps requested [checkIn, checkOut)
+                // when b.checkin < checkOut AND b.checkout > checkIn
+                $overlapSql = "SELECT DISTINCT br.roomnumber_id
+                               FROM tbl_booking_room br
+                               INNER JOIN tbl_booking b ON br.booking_id = b.booking_id
+                               LEFT JOIN (
+                                   SELECT bh1.booking_id, bs.booking_status_name
+                                   FROM tbl_booking_history bh1
+                                   INNER JOIN (
+                                       SELECT booking_id, MAX(booking_history_id) AS latest_history_id
+                                       FROM tbl_booking_history
+                                       GROUP BY booking_id
+                                   ) last ON last.booking_id = bh1.booking_id AND last.latest_history_id = bh1.booking_history_id
+                                   INNER JOIN tbl_booking_status bs ON bh1.status_id = bs.booking_status_id
+                               ) st ON st.booking_id = b.booking_id
+                               WHERE b.booking_isArchive = 0
+                                 AND COALESCE(st.booking_status_name, 'Pending') IN ('Pending','Approved','Checked-In')
+                                 AND b.booking_checkin_dateandtime < :check_out
+                                 AND b.booking_checkout_dateandtime > :check_in";
+
+                $sql = "SELECT 
+                            rt.roomtype_id,
+                            COUNT(r.roomnumber_id) AS total_rooms,
+                            SUM(CASE WHEN ov.roomnumber_id IS NULL THEN 1 ELSE 0 END) AS available_rooms
+                        FROM tbl_rooms r
+                        JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
+                        LEFT JOIN ( $overlapSql ) ov ON ov.roomnumber_id = r.roomnumber_id
+                        GROUP BY rt.roomtype_id
+                        ORDER BY rt.roomtype_id";
+
+                $stmt = $conn->prepare($sql);
+                $stmt->bindParam(':check_in', $checkIn);
+                $stmt->bindParam(':check_out', $checkOut);
+                $stmt->execute();
+            } else {
+                // Fallback: legacy availability without date filter
+                $sql = "SELECT 
+                            rt.roomtype_id,
+                            COUNT(r.roomnumber_id) AS total_rooms,
+                            COUNT(r.roomnumber_id) - COALESCE(req.total_requested, 0) AS available_rooms
+                        FROM tbl_roomtype rt
+                        LEFT JOIN tbl_rooms r ON rt.roomtype_id = r.roomtype_id AND r.room_status_id = 3
+                        LEFT JOIN (
+                            SELECT br.roomtype_id, COUNT(*) AS total_requested
+                            FROM tbl_booking_room br
+                            INNER JOIN tbl_booking b ON b.booking_id = br.booking_id
+                            WHERE b.booking_isArchive = 0
+                            GROUP BY br.roomtype_id
+                        ) req ON req.roomtype_id = rt.roomtype_id
+                        GROUP BY rt.roomtype_id
+                        ORDER BY rt.roomtype_id";
+                $stmt = $conn->prepare($sql);
+                $stmt->execute();
             }
 
-            // 3) Compute availability per room type = total - booked (never negative)
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $availableByType = [];
             $totalAvailableRooms = 0;
-            for ($id = 1; $id <= 8; $id++) {
-                $totalRooms = $totals[$id] ?? 0;
-                $bookedRooms = $booked[$id] ?? 0;
-                $available = max(0, $totalRooms - $bookedRooms);
-                $availableByType[$id] = $available;
-                $totalAvailableRooms += $available;
+            foreach ($rows as $row) {
+                $id = (int)$row['roomtype_id'];
+                $avail = (int)$row['available_rooms'];
+                if ($avail < 0) { $avail = 0; }
+                $availableByType[$id] = $avail;
+                $totalAvailableRooms += $avail;
             }
 
-            // Preserve existing field names used by the frontend, and include a by_roomtype map
             $result = [
                 'total_available_rooms' => $totalAvailableRooms,
                 'standard_twin_available' => $availableByType[1] ?? 0,
@@ -5034,7 +5077,11 @@ switch ($methodType) {
 
     // THis should reflect to customer booking page
     case "countAvailableRooms":
-        echo $AdminClass->countAvailableRooms();
+        echo $AdminClass->getAvailableRoomsCount($jsonData);
+        break;
+
+    case "getAvailableRoomsCount":
+        echo $AdminClass->getAvailableRoomsCount($jsonData);
         break;
 
     case "reqAvailRooms":
