@@ -406,3 +406,1293 @@
 [2025-10-13T23:26:23+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 221 2.0.0 closing connection d2e1a72fcca58-7992db82007sm12650906b3a.77 - gsmtp
 
 [2025-10-13T23:26:23+02:00] Email sent successfully to: ivla.versoza.coc@phinmaed.com
+[2025-10-15T00:04:39+02:00] Attempting to send email to: ivla.versoza.coc@phinmaed.com | Subject: Demirens Booking
+[2025-10-15T00:04:40+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 smtp.gmail.com ESMTP 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:40+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 1): CLIENT -> SERVER: STARTTLS
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 2.0.0 Ready to start TLS
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 1): CLIENT -> SERVER: AUTH LOGIN
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 VXNlcm5hbWU6
+
+[2025-10-15T00:04:41+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 UGFzc3dvcmQ6
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 235 2.7.0 Accepted
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MAIL FROM:<ikversoza@gmail.com>
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.0 OK 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 1): CLIENT -> SERVER: RCPT TO:<ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.5 OK 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:42+02:00] SMTP Debug (level 1): CLIENT -> SERVER: DATA
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 354 Go ahead 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Date: Wed, 15 Oct 2025 00:04:39 +0200
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: To: Guest <ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: From: Demiren Hotel <ikversoza@gmail.com>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Subject: Demirens Booking
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Message-ID: <zEzz0E3mTUHp34ZVgeG3RO3eAaqSdD4iVSlIqdwp6g@localhost>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: X-Mailer: PHPMailer 6.9.3 (https://github.com/PHPMailer/PHPMailer)
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MIME-Version: 1.0
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: multipart/alternative;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  boundary="b1=_zEzz0E3mTUHp34ZVgeG3RO3eAaqSdD4iVSlIqdwp6g"
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_zEzz0E3mTUHp34ZVgeG3RO3eAaqSdD4iVSlIqdwp6g
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/plain; charset=us-ascii
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: This is the plain text version of the email.
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_zEzz0E3mTUHp34ZVgeG3RO3eAaqSdD4iVSlIqdwp6g
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/html; charset=UTF-8
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <html>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <head>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <style>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Base styles */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         body {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f4f6f8;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #333;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-wrapper {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             width: 100%;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f4f6f8;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 40px 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-container {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             max-width: 600px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0 auto;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #ffffff;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 12px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             overflow: hidden;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border: 1px solid #e6ebf1;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Header */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-header {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background: linear-gradient(135deg, #1a73e8, #4285f4);
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: white;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-align: center;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 25px 20px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-header h1 {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 22px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 600;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             letter-spacing: 0.3px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Body content */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 35px 40px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body h2 {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 20px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 600;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #1a73e8;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-top: 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-bottom: 15px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body p {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 15px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             line-height: 1.7;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #444;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 10px 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-highlight {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f1f6ff;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-left: 4px solid #1a73e8;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 12px 16px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 25px 0;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 6px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #1a1a1a;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 14px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             line-height: 1.6;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Button */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-button {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             display: inline-block;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #1a73e8;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #ffffff;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 12px 28px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 6px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 15px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-decoration: none;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 500;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-top: 20px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-button:hover {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #1669c1;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Footer */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-footer {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 12px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #777;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-align: center;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-top: 1px solid #eaeaea;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 20px 10px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #fafafa;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Mobile responsive */
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         @media only screen and (max-width: 600px) {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             .email-body {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 padding: 25px 20px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             .email-header h1 {
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 font-size: 20px;
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </style>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </head>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <body>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         <div class="email-wrapper">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             <div class="email-container">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-header">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <h1>Demiren Hotel & Restaurant</h1>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-body">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <h2>Your Booking Request Has Been Received!</h2>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Hi there,</p>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Thank you for choosing <strong>Demiren Hotel & Restaurant</strong>. We’re delighted that you’re planning to stay with us!</p>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <div class="email-highlight">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         <strong>Your booking request is currently under review.</strong><br>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         Once it’s approved by our front desk team, you’ll receive a confirmation email with all the details of your stay.
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         You may cancel it within 24 hours Just contact us at <a href="mailto:demirenhotel@gmail.com" style="color:#1a73e8; text-decoration:none;">info@demirenhotel.com</a>.
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>If you have any questions in the meantime, feel free to contact us at <a href="mailto:demirenhotel@gmail.com" style="color:#1a73e8; text-decoration:none;">info@demirenhotel.com</a>.</p>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>We look forward to welcoming you soon!</p>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Warm regards,<br>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <strong>The Demiren Team</strong></p>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-footer">
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     This is an automated message from Demiren Hotel & Restaurant.<br>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     Please do not reply directly to this email.
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         </div>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </body>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </html>
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_zEzz0E3mTUHp34ZVgeG3RO3eAaqSdD4iVSlIqdwp6g--
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: .
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.0.0 OK  1760479483 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:43+02:00] SMTP Debug (level 1): CLIENT -> SERVER: QUIT
+
+[2025-10-15T00:04:44+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 221 2.0.0 closing connection 41be03b00d2f7-b67ace7f858sm10032947a12.39 - gsmtp
+
+[2025-10-15T00:04:44+02:00] Email sent successfully to: ivla.versoza.coc@phinmaed.com
+[2025-10-15T00:12:47+02:00] Attempting to send email to: ivla.versoza.coc@phinmaed.com | Subject: Booking Confirmation - Demiren Hotel - Ref REF20251015000439603
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 smtp.gmail.com ESMTP 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 1): CLIENT -> SERVER: STARTTLS
+
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 2.0.0 Ready to start TLS
+
+[2025-10-15T00:12:48+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 1): CLIENT -> SERVER: AUTH LOGIN
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 VXNlcm5hbWU6
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 UGFzc3dvcmQ6
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 235 2.7.0 Accepted
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MAIL FROM:<ikversoza@gmail.com>
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.0 OK 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:49+02:00] SMTP Debug (level 1): CLIENT -> SERVER: RCPT TO:<ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.5 OK 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: DATA
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 354 Go ahead 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Date: Wed, 15 Oct 2025 00:12:47 +0200
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: To: Guest <ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: From: Demiren Hotel <ikversoza@gmail.com>
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Subject: Booking Confirmation - Demiren Hotel - Ref REF20251015000439603
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Message-ID: <9PEildKZb2Wa7OhzIClhcKqDBDMYJcNqUgigMxnsy4@localhost>
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: X-Mailer: PHPMailer 6.9.3 (https://github.com/PHPMailer/PHPMailer)
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MIME-Version: 1.0
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: multipart/alternative;
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  boundary="b1=_9PEildKZb2Wa7OhzIClhcKqDBDMYJcNqUgigMxnsy4"
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_9PEildKZb2Wa7OhzIClhcKqDBDMYJcNqUgigMxnsy4
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/plain; charset=us-ascii
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: This is the plain text version of the email.
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_9PEildKZb2Wa7OhzIClhcKqDBDMYJcNqUgigMxnsy4
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/html; charset=UTF-8
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: quoted-printable
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: <div style=3D"font-family:Arial,sans-serif;color:#000;max-width:600px;margi=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: n:0 auto;background:#fff;"><div style=3D"padding:20px;"><p style=3D"margin:=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 0 0 16px;font-size:16px;">Dear Monika Versoza,</p><p style=3D"margin:0 0 20=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px;font-size:16px;line-height:1.5;">Thank you for booking your stay with us=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: .. We are looking forward to your visit.</p><p style=3D"margin:0 0 12px;font=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: -size:16px;">Your booking details are as follows:</p><p style=3D"margin:0 0=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  16px;font-size:16px;line-height:1.5;">We are pleased to confirm that your =
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: selected room(s) <strong>1</strong> have been successfully reserved.</p><di=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: v style=3D"background:#f9f9f9;border:1px solid #ddd;border-radius:8px;paddi=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ng:20px;margin:20px 0;"><table style=3D"width:100%;border-collapse:collapse=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ;"><tr><td style=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px;">Reference #</td><td style=3D"padding:8px 0;border-bottom:1px solid #ee=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: e;font-size:14px;font-weight:bold;">REF20251015000439603</td></tr><tr><td s=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: tyle=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;">Check i=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: n</td><td style=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14p=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: x;font-weight:bold;">October 15, 2025 at 2:00 PM</td></tr><tr><td style=3D"=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: padding:8px 0;border-bottom:1px solid #eee;font-size:14px;">Check out</td><=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: td style=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;font-=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: weight:bold;">November 3, 2025 at 12:00 PM</td></tr><tr><td style=3D"paddin=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: g:8px 0;border-bottom:1px solid #eee;font-size:14px;">Room Type</td><td sty=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: le=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;">Single Ro=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: om</td></tr><tr><td style=3D"padding:8px 0;border-bottom:1px solid #eee;fon=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: t-size:14px;">Room Number(s)</td><td style=3D"padding:8px 0;border-bottom:1=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px solid #eee;font-size:14px;">1</td></tr><tr><td style=3D"padding:8px 0;bo=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: rder-bottom:1px solid #eee;font-size:14px;">Breakfast</td><td style=3D"padd=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing:8px 0;border-bottom:1px solid #eee;font-size:14px;">included</td></tr><=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: tr><td style=3D"padding:8px 0;border-bottom:1px solid #eee;font-size:14px;"=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ># of Guests</td><td style=3D"padding:8px 0;border-bottom:1px solid #eee;fo=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: nt-size:14px;">1 adult</td></tr><tr><td style=3D"padding:8px 0;border-botto=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: m:1px solid #eee;font-size:14px;">Booked by</td><td style=3D"padding:8px 0;=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: border-bottom:1px solid #eee;font-size:14px;">Monika Versoza (ivla.versoza.=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: coc@phinmaed.com)</td></tr><tr><td style=3D"padding:8px 0;font-size:14px;">=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Total</td><td style=3D"padding:8px 0;font-size:14px;font-weight:bold;">=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =E2=82=B116,720.00</td></tr></table></div><p style=3D"margin:20px 0 0;font-=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: size:16px;line-height:1.5;">If you have any questions please don't hesitate=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  to contact us.</p><p style=3D"margin:16px 0 0;font-size:16px;line-height:1=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ..5;">We hope you enjoy your stay with us!</p><div style=3D"margin-top:30px;=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: "><p style=3D"margin:0 0 4px;font-size:16px;">Best Regards,</p><p style=3D"=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: margin:0;font-size:16px;font-weight:bold;">Demiren Hotel</p></div></div></d=
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: iv>
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_9PEildKZb2Wa7OhzIClhcKqDBDMYJcNqUgigMxnsy4--
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:12:50+02:00] SMTP Debug (level 1): CLIENT -> SERVER: .
+
+[2025-10-15T00:12:51+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.0.0 OK  1760479970 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:51+02:00] SMTP Debug (level 1): CLIENT -> SERVER: QUIT
+
+[2025-10-15T00:12:51+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 221 2.0.0 closing connection 98e67ed59e1d1-33b626407c4sm16809074a91.6 - gsmtp
+
+[2025-10-15T00:12:51+02:00] Email sent successfully to: ivla.versoza.coc@phinmaed.com
+[2025-10-15T00:23:13+02:00] Attempting to send email to: ivla.versoza.coc@phinmaed.com | Subject: Demirens Booking
+[2025-10-15T00:23:13+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 smtp.gmail.com ESMTP 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:13+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 1): CLIENT -> SERVER: STARTTLS
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 2.0.0 Ready to start TLS
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 1): CLIENT -> SERVER: AUTH LOGIN
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 VXNlcm5hbWU6
+
+[2025-10-15T00:23:14+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 UGFzc3dvcmQ6
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 235 2.7.0 Accepted
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MAIL FROM:<ikversoza@gmail.com>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.0 OK 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: RCPT TO:<ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.5 OK 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: DATA
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 354 Go ahead 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Date: Wed, 15 Oct 2025 00:23:13 +0200
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: To: Guest <ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: From: Demiren Hotel <ikversoza@gmail.com>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Subject: Demirens Booking
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Message-ID: <PSYfOsLD4qXu4QtqDWAFcUWazXBSu1yECwrymQfM5g@localhost>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: X-Mailer: PHPMailer 6.9.3 (https://github.com/PHPMailer/PHPMailer)
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MIME-Version: 1.0
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: multipart/alternative;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  boundary="b1=_PSYfOsLD4qXu4QtqDWAFcUWazXBSu1yECwrymQfM5g"
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_PSYfOsLD4qXu4QtqDWAFcUWazXBSu1yECwrymQfM5g
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/plain; charset=us-ascii
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: This is the plain text version of the email.
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_PSYfOsLD4qXu4QtqDWAFcUWazXBSu1yECwrymQfM5g
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/html; charset=UTF-8
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <html>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <head>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <style>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Base styles */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         body {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f4f6f8;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #333;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-wrapper {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             width: 100%;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f4f6f8;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 40px 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-container {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             max-width: 600px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0 auto;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #ffffff;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 12px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             overflow: hidden;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border: 1px solid #e6ebf1;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Header */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-header {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background: linear-gradient(135deg, #1a73e8, #4285f4);
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: white;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-align: center;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 25px 20px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-header h1 {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 22px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 600;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             letter-spacing: 0.3px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Body content */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 35px 40px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body h2 {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 20px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 600;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #1a73e8;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-top: 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-bottom: 15px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-body p {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 15px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             line-height: 1.7;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #444;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 10px 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-highlight {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #f1f6ff;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-left: 4px solid #1a73e8;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 12px 16px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin: 25px 0;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 6px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #1a1a1a;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 14px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             line-height: 1.6;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Button */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-button {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             display: inline-block;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #1a73e8;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #ffffff;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 12px 28px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-radius: 6px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 15px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-decoration: none;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-weight: 500;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             margin-top: 20px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-button:hover {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #1669c1;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Footer */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         .email-footer {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             font-size: 12px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             color: #777;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             text-align: center;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             border-top: 1px solid #eaeaea;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             padding: 20px 10px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             background-color: #fafafa;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         /* Mobile responsive */
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         @media only screen and (max-width: 600px) {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             .email-body {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 padding: 25px 20px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             .email-header h1 {
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 font-size: 20px;
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         }
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </style>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </head>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     <body>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         <div class="email-wrapper">
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             <div class="email-container">
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-header">
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <h1>Demiren Hotel & Restaurant</h1>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-body">
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <h2>Your Booking Request Has Been Received!</h2>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Hi there,</p>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Thank you for choosing <strong>Demiren Hotel & Restaurant</strong>. We’re delighted that you’re planning to stay with us!</p>
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:15+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <div class="email-highlight">
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         <strong>Your booking request is currently under review.</strong><br>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         Once it’s approved by our front desk team, you’ll receive a confirmation email with all the details of your stay.
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                         You may cancel it within 24 hours Just contact us at <a href="mailto:demirenhotel@gmail.com" style="color:#1a73e8; text-decoration:none;">info@demirenhotel.com</a>.
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     </div>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>If you have any questions in the meantime, feel free to contact us at <a href="mailto:demirenhotel@gmail.com" style="color:#1a73e8; text-decoration:none;">info@demirenhotel.com</a>.</p>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>We look forward to welcoming you soon!</p>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <p>Warm regards,<br>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     <strong>The Demiren Team</strong></p>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 <div class="email-footer">
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     This is an automated message from Demiren Hotel & Restaurant.<br>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                     Please do not reply directly to this email.
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                                 </div>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                             </div>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                         </div>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </body>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER:                     </html>
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_PSYfOsLD4qXu4QtqDWAFcUWazXBSu1yECwrymQfM5g--
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: .
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.0.0 OK  1760480595 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 1): CLIENT -> SERVER: QUIT
+
+[2025-10-15T00:23:16+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 221 2.0.0 closing connection 98e67ed59e1d1-33b626ec2f9sm16744425a91.25 - gsmtp
+
+[2025-10-15T00:23:16+02:00] Email sent successfully to: ivla.versoza.coc@phinmaed.com
+[2025-10-15T00:25:23+02:00] Attempting to send email to: ivla.versoza.coc@phinmaed.com | Subject: Booking Confirmation - Demiren Hotel - Ref REF20251015002313165
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 smtp.gmail.com ESMTP 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-STARTTLS
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 1): CLIENT -> SERVER: STARTTLS
+
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 220 2.0.0 Ready to start TLS
+
+[2025-10-15T00:25:24+02:00] SMTP Debug (level 1): CLIENT -> SERVER: EHLO localhost
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250-smtp.gmail.com at your service, [143.44.192.55]
+250-SIZE 35882577
+250-8BITMIME
+250-AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH
+250-ENHANCEDSTATUSCODES
+250-PIPELINING
+250-CHUNKING
+250 SMTPUTF8
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: AUTH LOGIN
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 VXNlcm5hbWU6
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 334 UGFzc3dvcmQ6
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: [credentials hidden]
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 235 2.7.0 Accepted
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MAIL FROM:<ikversoza@gmail.com>
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.0 OK 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: RCPT TO:<ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.1.5 OK 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:25+02:00] SMTP Debug (level 1): CLIENT -> SERVER: DATA
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 354 Go ahead 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Date: Wed, 15 Oct 2025 00:25:23 +0200
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: To: Guest <ivla.versoza.coc@phinmaed.com>
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: From: Demiren Hotel <ikversoza@gmail.com>
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Subject: Booking Confirmation - Demiren Hotel - Ref REF20251015002313165
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Message-ID: <iZYVSYN1gvPLxuFOSTuZfWNqyvbcxeq6tv6jsbXWKM@localhost>
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: X-Mailer: PHPMailer 6.9.3 (https://github.com/PHPMailer/PHPMailer)
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: MIME-Version: 1.0
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: multipart/alternative;
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  boundary="b1=_iZYVSYN1gvPLxuFOSTuZfWNqyvbcxeq6tv6jsbXWKM"
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: 8bit
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_iZYVSYN1gvPLxuFOSTuZfWNqyvbcxeq6tv6jsbXWKM
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/plain; charset=us-ascii
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: This is the plain text version of the email.
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_iZYVSYN1gvPLxuFOSTuZfWNqyvbcxeq6tv6jsbXWKM
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Type: text/html; charset=UTF-8
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: Content-Transfer-Encoding: quoted-printable
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: <center><style>@media only screen and (max-width:480px){.sm-p{padding:16px!=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: important;} .sm-text{font-size:14px!important;} .sm-stack{display:block!imp=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ortant;width:100%!important;}}</style><table role=3D"presentation" cellpadd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing=3D"0" cellspacing=3D"0" width=3D"100%" style=3D"background:#f3f4f6;padd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing:20px 0;"><tr><td align=3D"center"><table role=3D"presentation" cellpadd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing=3D"0" cellspacing=3D"0" width=3D"100%" style=3D"max-width:600px;backgro=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: und:#ffffff;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;font=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: -family:Arial,sans-serif;"><tr><td style=3D"padding:0;"><div style=3D"backg=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: round:#111827;color:#ffffff;padding:16px 20px;font-size:18px;font-weight:bo=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ld;">Demiren Hotel =E2=80=A2 Booking Confirmation =E2=80=94 REF202510150023=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 13165</div></td></tr><tr><td class=3D"sm-p" style=3D"padding:24px;color:#11=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 1827;"><p style=3D"margin:0 0 12px;font-size:16px;">Dear Ivan Ky Versoza,</=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: p><p class=3D"sm-text" style=3D"margin:0 0 16px;font-size:15px;line-height:=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 1.6;color:#374151;">Thank you for booking your stay with us. We're excited =
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: to host you. Below is a summary of your reservation.</p><p class=3D"sm-text=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: " style=3D"margin:0 0 12px;font-size:15px;line-height:1.6;color:#374151;">W=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: e are pleased to confirm that your selected room(s) <strong>2</strong> have=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  been successfully reserved.</p><div style=3D"background:#f9fafb;border:1px=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  solid #e5e7eb;border-radius:8px;padding:16px;margin:12px 0;"><table role=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"presentation" width=3D"100%" cellpadding=3D"0" cellspacing=3D"0" style=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"border-collapse:collapse;"><tr><td class=3D"sm-stack" style=3D"padding:=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#374151;">Referenc=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: e #</td><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  #eef2f7;font-size:14px;color:#111827;font-weight:bold;">REF202510150023131=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 65</td></tr><tr><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px solid #eef2f7;font-size:14px;color:#374151;">Check in</td><td class=3D"s=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: m-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14p=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: x;color:#111827;font-weight:bold;">October 16, 2025 at 2:00 PM</td></tr><tr=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 7;font-size:14px;color:#374151;">Check out</td><td class=3D"sm-stack" style=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#11182=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 7;font-weight:bold;">October 20, 2025 at 12:00 PM</td></tr><tr><td class=3D=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: "sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:1=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 4px;color:#374151;">Room Type</td><td class=3D"sm-stack" style=3D"padding:8=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px;border-bottom:1px solid #eef2f7;font-size:14px;color:#111827;">Double Ro=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: om</td></tr><tr><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px solid #eef2f7;font-size:14px;color:#374151;">Room Number(s)</td><td clas=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: s=3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-si=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ze:14px;color:#111827;">2</td></tr><tr><td class=3D"sm-stack" style=3D"padd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#374151;"># of=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  Guests</td><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px s=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: olid #eef2f7;font-size:14px;color:#111827;">1 adult</td></tr><tr><td class=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-siz=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: e:14px;color:#374151;">Booked by</td><td class=3D"sm-stack" style=3D"paddin=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: g:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#111827;">Ivan K=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: y Versoza (ivla.versoza.coc@phinmaed.com)</td></tr><tr><td class=3D"sm-stac=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: k" style=3D"padding:8px;font-size:14px;color:#374151;">Total</td><td class=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"sm-stack" style=3D"padding:8px;font-size:14px;color:#111827;font-weight=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: :bold;">=E2=82=B14,720.00</td></tr></table></div><h3 style=3D"margin:20px 0=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  8px;font-size:16px;color:#111827;">Payment and invoice details</h3><div st=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: yle=3D"background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;paddin=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: g:16px;margin:12px 0;"><table role=3D"presentation" width=3D"100%" cellpadd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing=3D"0" cellspacing=3D"0" style=3D"border-collapse:collapse;"><tr><td cla=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ss=3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-s=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ize:14px;color:#374151;">Invoice #</td><td class=3D"sm-stack" style=3D"padd=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ing:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#111827;font-w=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: eight:bold;">REF20251015002313165</td></tr><tr><td class=3D"sm-stack" style=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: =3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#37415=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 1;">Payment Method</td><td class=3D"sm-stack" style=3D"padding:8px;border-b=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ottom:1px solid #eef2f7;font-size:14px;color:#111827;">GCash</td></tr><tr><=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: font-size:14px;color:#374151;">Total Amount</td><td class=3D"sm-stack" styl=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: e=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#1118=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 27;font-weight:bold;">=E2=82=B14,720.00</td></tr><tr><td class=3D"sm-stack"=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: #374151;">Downpayment</td><td class=3D"sm-stack" style=3D"padding:8px;borde=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: r-bottom:1px solid #eef2f7;font-size:14px;color:#111827;">=E2=82=B12,360.00=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: </td></tr><tr><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  solid #eef2f7;font-size:14px;color:#374151;">VAT</td><td class=3D"sm-stack=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: " style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: :#111827;">=E2=82=B1506.00</td></tr><tr><td class=3D"sm-stack" style=3D"pad=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#374151;">Bal=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ance</td><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px soli=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: d #eef2f7;font-size:14px;color:#111827;font-weight:bold;">=E2=82=B14,720.00=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: </td></tr><tr><td class=3D"sm-stack" style=3D"padding:8px;border-bottom:1px=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER:  solid #eef2f7;font-size:14px;color:#374151;">Billing Date</td><td class=3D=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: "sm-stack" style=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:1=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 4px;color:#111827;">October 15, 2025</td></tr><tr><td class=3D"sm-stack" st=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: yle=3D"padding:8px;border-bottom:1px solid #eef2f7;font-size:14px;color:#37=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 4151;">Invoice Date</td><td class=3D"sm-stack" style=3D"padding:8px;border-=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: bottom:1px solid #eef2f7;font-size:14px;color:#111827;"></td></tr><tr><td c=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: lass=3D"sm-stack" style=3D"padding:8px;font-size:14px;color:#374151;">Invoi=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ce Time</td><td class=3D"sm-stack" style=3D"padding:8px;font-size:14px;colo=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: r:#111827;"></td></tr></table></div><p class=3D"sm-text" style=3D"margin:16=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: px 0 0;font-size:15px;line-height:1.6;color:#374151;">If you have any quest=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: ions, please reply to this email or contact our front desk.</p><p class=3D"=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: sm-text" style=3D"margin:4px 0 0;font-size:15px;line-height:1.6;color:#3741=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 51;">We hope you enjoy your stay with us!</p><div style=3D"margin-top:24px;=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: color:#111827;"><p style=3D"margin:0 0 4px;font-size:15px;">Best Regards,</=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: p><p style=3D"margin:0;font-size:15px;font-weight:bold;">Demiren Hotel</p><=
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: /div></td></tr></table></td></tr></table></center>
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: --b1=_iZYVSYN1gvPLxuFOSTuZfWNqyvbcxeq6tv6jsbXWKM--
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: 
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: .
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 250 2.0.0 OK  1760480726 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 1): CLIENT -> SERVER: QUIT
+
+[2025-10-15T00:25:26+02:00] SMTP Debug (level 2): SERVER -> CLIENT: 221 2.0.0 closing connection 41be03b00d2f7-b67ace7f858sm10055083a12.39 - gsmtp
+
+[2025-10-15T00:25:26+02:00] Email sent successfully to: ivla.versoza.coc@phinmaed.com

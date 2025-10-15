@@ -356,7 +356,7 @@ class Transactions
         $payment_method_id = $json["payment_method_id"] ?? 2; // Default to Cash
         $invoice_status_id = 1; // Always set to Complete for checkout scenarios
         $discount_id = $json["discount_id"] ?? null;
-        $vat_rate = $json["vat_rate"] ?? 0.12; // Default 12% VAT
+        $vat_rate = $json["vat_rate"] ?? 0.0; // Default 0% VAT
         $downpayment = $json["downpayment"] ?? 0;
     
         // Safeguards: ensure billing_ids present and employee_id valid; validate employee exists and is active
@@ -485,7 +485,7 @@ class Transactions
         }
     }
 
-    function calculateComprehensiveBillingInternal($conn, $booking_id, $discount_id = null, $vat_rate = 0.12, $downpayment = 0)
+    function calculateComprehensiveBillingInternal($conn, $booking_id, $discount_id = null, $vat_rate = 0.0, $downpayment = 0)
     {
         try {
             // 1. Calculate room charges (fixed the room price query)
@@ -501,6 +501,21 @@ class Transactions
             $roomQuery->execute();
             $roomData = $roomQuery->fetch(PDO::FETCH_ASSOC);
             $room_total = $roomData['room_total'] ?: 0;
+            // Recompute room_total to account for number of nights per room
+            try {
+                $roomQueryNights = $conn->prepare("
+                    SELECT 
+                        SUM(rt.roomtype_price * GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1)) AS room_total
+                    FROM tbl_booking_room br
+                    JOIN tbl_booking b ON br.booking_id = b.booking_id
+                    JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
+                    JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
+                    WHERE br.booking_id = :booking_id
+                ");
+                $roomQueryNights->bindParam(':booking_id', $booking_id);
+                $roomQueryNights->execute();
+                $room_total = $roomQueryNights->fetchColumn() ?: $room_total;
+            } catch (Exception $_) {}
 
             // 2. Calculate additional charges (amenities, services, etc.)
             $chargesQuery = $conn->prepare("
@@ -543,13 +558,10 @@ class Transactions
             // 5. Calculate amount after discount
             $amount_after_discount = $subtotal - $discount_amount;
 
-            // 6. Calculate VAT
-            $vat_amount = $amount_after_discount * $vat_rate;
+            // 6. Calculate final total (VAT removed)
+            $final_total = $amount_after_discount;
 
-            // 7. Calculate final total
-            $final_total = $amount_after_discount + $vat_amount;
-
-            // 8. Calculate balance after downpayment
+            // 7. Calculate balance after downpayment
             $balance = $final_total - $downpayment;
 
             return [
@@ -559,7 +571,6 @@ class Transactions
                 "subtotal" => $subtotal,
                 "discount_amount" => $discount_amount,
                 "amount_after_discount" => $amount_after_discount,
-                "vat_amount" => $vat_amount,
                 "final_total" => $final_total,
                 "downpayment" => $downpayment,
                 "balance" => $balance,
@@ -661,7 +672,7 @@ class Transactions
         $json = json_decode($json, true);
         $booking_id = $json["booking_id"];
         $discount_id = $json["discount_id"] ?? null;
-        $vat_rate = $json["vat_rate"] ?? 0.12;
+        $vat_rate = $json["vat_rate"] ?? 0.0;
         $downpayment = $json["downpayment"] ?? 0;
 
         // If no downpayment provided, get it from the booking
@@ -738,8 +749,9 @@ class Transactions
 
             // 2. Calculate room charges
             $roomQuery = $conn->prepare("
-                SELECT SUM(rt.roomtype_price) AS room_total
+                SELECT SUM(rt.roomtype_price * GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1)) AS room_total
                 FROM tbl_booking_room br
+                JOIN tbl_booking b ON br.booking_id = b.booking_id
                 JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
                 JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
                 WHERE br.booking_id = :booking_id
@@ -787,11 +799,9 @@ class Transactions
             // 6. Calculate amount after discount
             $amount_after_discount = $subtotal - $discount_amount;
 
-            // 7. Calculate VAT
-            $vat_amount = $amount_after_discount * $vat_rate;
-
-            // 8. Calculate final total
-            $final_total = $amount_after_discount + $vat_amount;
+            // 7. VAT removed; final total equals amount after discount
+            $final_total = $amount_after_discount;
+            $vat_amount = 0;
 
             // 9. Get booking downpayment
             $downpayment = $booking['booking_downpayment'] ?? 0;
@@ -846,8 +856,7 @@ class Transactions
                     'booking_id' => $booking_id,
                     'total_amount' => $final_total,
                     'downpayment' => $downpayment,
-                    'balance' => $balance,
-                    'vat_amount' => $vat_amount
+                    'balance' => $balance
                 ]);
                 
                 $activityQuery->bindParam(':employee_id', $employee_id);
@@ -921,10 +930,11 @@ class Transactions
                     r.roomnumber_id as room_number,
                     rt.roomtype_name as room_type,
                     rt.roomtype_price as unit_price,
-                    1 as quantity,
-                    rt.roomtype_price as total_amount,
+                    GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1) as quantity,
+                    (rt.roomtype_price * GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1)) as total_amount,
                     rt.roomtype_description as charges_master_description
                 FROM tbl_booking_room br
+                JOIN tbl_booking b ON br.booking_id = b.booking_id
                 JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
                 JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
                 WHERE br.booking_id = :booking_id
@@ -1039,7 +1049,8 @@ class Transactions
 
             // Add charge to booking
             $addCharge = $conn->prepare("
-                INSERT INTO tbl_booking_charges (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity, booking_charge_status)
+                INSERT INTO tbl_booking_charges (booking_room_id, charges_master_id, booking_charges_price, booking_charges_quantity, 
+                booking_charge_status)
                 VALUES (:booking_room_id, :charges_master_id, :charge_price, :quantity, 2)
             ");
             $addCharge->bindParam(':booking_room_id', $booking_room_id);
@@ -1147,11 +1158,7 @@ class Transactions
                     COALESCE(latest_billing.billing_downpayment, b.booking_downpayment)
                 ELSE b.booking_downpayment
             END AS downpayment,
-            CASE 
-                WHEN latest_billing.billing_id IS NOT NULL THEN
-                    COALESCE(latest_billing.billing_vat, 0)
-                ELSE 0
-            END AS vat,
+            
             -- Status and billing info
             CASE 
                 WHEN latest_invoice.invoice_status_id = 1 THEN 'Checked-Out'
@@ -1285,10 +1292,11 @@ class Transactions
                     r.roomnumber_id as room_number,
                     rt.roomtype_name as room_type,
                     rt.roomtype_price as unit_price,
-                    1 as quantity,
-                    rt.roomtype_price as total_amount,
+                    GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1) as quantity,
+                    (rt.roomtype_price * GREATEST(DATEDIFF(b.booking_checkout_dateandtime, b.booking_checkin_dateandtime), 1)) as total_amount,
                     rt.roomtype_description as charges_master_description
                 FROM tbl_booking_room br
+                JOIN tbl_booking b ON br.booking_id = b.booking_id
                 JOIN tbl_rooms r ON br.roomnumber_id = r.roomnumber_id
                 JOIN tbl_roomtype rt ON r.roomtype_id = rt.roomtype_id
                 WHERE br.booking_id = :booking_id
@@ -1326,9 +1334,7 @@ class Transactions
             $room_total = array_sum(array_column($roomCharges, 'total_amount'));
             $charges_total = array_sum(array_column($additionalCharges, 'total_amount'));
             $subtotal = $room_total + $charges_total;
-            $vat_rate = 0.12;
-            $vat_amount = $subtotal * $vat_rate;
-            $grand_total = $subtotal + $vat_amount;
+            $grand_total = $subtotal;
 
             // Get booking downpayment
             $bookingQuery = $conn->prepare("SELECT booking_downpayment FROM tbl_booking WHERE booking_id = :booking_id");
@@ -1346,8 +1352,6 @@ class Transactions
                     "room_total" => $room_total,
                     "charges_total" => $charges_total,
                     "subtotal" => $subtotal,
-                    "vat_rate" => $vat_rate,
-                    "vat_amount" => $vat_amount,
                     "grand_total" => $grand_total,
                     "downpayment" => $downpayment,
                     "balance" => $balance
