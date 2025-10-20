@@ -401,10 +401,16 @@ class Demiren_customer
             $sql = "INSERT INTO tbl_booking_history
             (booking_id, employee_id, status_id, updated_at) 
             VALUES 
-            (:booking_id, NULL, 1, NOW())";
+            (:booking_id, NULL, 2, NOW())";
             $stmt = $conn->prepare($sql);
             $stmt->bindParam(":booking_id", $bookingId);
             $stmt->execute();
+
+            if ($bookingDetails["payment_method_id"] == 1) {
+                $balance = $bookingDetails["totalAmount"] - $bookingDetails["totalPay"];
+            } else {
+                $balance = $bookingDetails["totalAmount"] - $bookingDetails["downpayment"];
+            }
 
             // ✅ Step 6: Billing record
             $sql = "INSERT INTO tbl_billing
@@ -416,7 +422,7 @@ class Demiren_customer
             $stmt->bindParam(":payment_method_id", $bookingDetails["payment_method_id"]);
             $stmt->bindParam(":total_amount", $bookingDetails["totalAmount"]);
             $stmt->bindParam(":billing_vat", $bookingDetails["displayedVat"]);
-            $stmt->bindParam(":billing_balance", $bookingDetails["totalAmount"]);
+            $stmt->bindParam(":billing_balance", $balance);
             $stmt->bindParam(":billing_downpayment", $bookingDetails["downpayment"]);
             $stmt->execute();
 
@@ -1204,17 +1210,6 @@ class Demiren_customer
         // yessssss
         include "connection.php";
         $json = json_decode($json, true);
-        $returnValueImage = uploadImage();
-        switch ($returnValueImage) {
-            case 2:
-                return 2; // invalid file type
-            case 3:
-                return 3; // upload error
-            case 4:
-                return 4; // file too big
-            default:
-                break;
-        }
 
         try {
             $conn->beginTransaction();
@@ -1229,17 +1224,16 @@ class Demiren_customer
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
                 (customers_id, guests_amnt, customers_walk_in_id, booking_downpayment, 
-                booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_totalAmount, booking_fileName) 
+                booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_totalAmount) 
             VALUES 
                 (:customers_id, :guestTotalAmount, NULL, :booking_downpayment, 
-                :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :totalAmount, :file)");
+                :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :totalAmount)");
             $stmt->bindParam(":customers_id", $customerId);
-            $stmt->bindParam(":booking_downpayment", $bookingDetails["totalPay"]);
+            $stmt->bindParam(":booking_downpayment", $bookingDetails["downpayment"]);
             $stmt->bindParam(":booking_checkin_dateandtime", $checkIn);
             $stmt->bindParam(":booking_checkout_dateandtime", $checkOut);
             $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
             $stmt->bindParam(":guestTotalAmount", $totalGuests);
-            $stmt->bindParam(":file", $returnValueImage);
             $stmt->execute();
             $bookingId = $conn->lastInsertId();
 
@@ -1303,7 +1297,11 @@ class Demiren_customer
                     $stmt->execute();
                 }
             }
-            $balance = $bookingDetails["totalAmount"] - $bookingDetails["totalPay"];
+            if ($bookingDetails["payment_method_id"] == 1) {
+                $balance = $bookingDetails["totalAmount"] - $bookingDetails["totalPay"];
+            } else {
+                $balance = $bookingDetails["totalAmount"] - $bookingDetails["downpayment"];
+            }
             $sql = "INSERT INTO tbl_billing(booking_id, payment_method_id, billing_total_amount, billing_dateandtime, billing_vat, billing_balance, billing_downpayment) 
                 VALUES (:booking_id, :payment_method_id, :total_amount, NOW(), :billing_vat, :billing_balance, :billing_downpayment)";
             $stmt = $conn->prepare($sql);
@@ -1403,6 +1401,8 @@ class Demiren_customer
             $stmt->bindParam(":adult", $bookingDetails["adult"]);
             $stmt->execute();
             $bookingId = $conn->lastInsertId();
+
+
 
             // Insert booking room records without assigning specific room numbers
             $sql = "INSERT INTO tbl_booking_room (booking_id, roomtype_id, roomnumber_id) 
@@ -2258,6 +2258,49 @@ class Demiren_customer
         $sendEmail = new SendEmail();
         return $sendEmail->sendEmail($emailToSent, "Customer Question", $emailBody);
     }
+
+    function isRoomAvailable($json)
+    {
+        include "connection.php";
+        $json = json_decode($json, true);
+        $bookingDetails = $json["bookingDetails"];
+        $roomDetails = $json["roomDetails"];
+        $checkIn = $bookingDetails["checkIn"];
+        $checkOut = $bookingDetails["checkOut"];
+        foreach ($roomDetails as $room) {
+            $roomTypeId = $room["roomTypeId"];
+            $availabilityStmt = $conn->prepare("
+                SELECT r.roomnumber_id
+                FROM tbl_rooms r
+                WHERE r.roomtype_id = :roomtype_id
+                AND r.room_status_id = 3
+                AND r.roomnumber_id NOT IN (
+                    SELECT br.roomnumber_id
+                    FROM tbl_booking_room br
+                    JOIN tbl_booking b ON br.booking_id = b.booking_id
+                    WHERE br.roomtype_id = :roomtype_id
+                        AND b.booking_isArchive = 0
+                        AND (
+                            b.booking_checkin_dateandtime < :check_out 
+                            AND b.booking_checkout_dateandtime > :check_in
+                        )
+                        AND br.roomnumber_id IS NOT NULL
+                )
+                LIMIT 1
+            ");
+            $availabilityStmt->bindParam(":roomtype_id", $roomTypeId);
+            $availabilityStmt->bindParam(":check_in", $checkIn);
+            $availabilityStmt->bindParam(":check_out", $checkOut);
+            $availabilityStmt->execute();
+
+            $availableRoom = $availabilityStmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$availableRoom) {
+                return -1;
+            }
+        }
+        return 1;
+    }
 } //customer
 
 function recordExists($value, $table, $column)
@@ -2436,6 +2479,9 @@ switch ($operation) {
     case "sendMessageEmail":
         echo $demiren_customer->sendMessageEmail($json);
         break;
+    case "isRoomAvailable":
+        echo json_encode($demiren_customer->isRoomAvailable($json));
+        break;
     // case "getRoomImages":
     //     echo json_encode($demiren_customer->getRoomImages($json));
     //     break;
@@ -2443,16 +2489,3 @@ switch ($operation) {
         echo json_encode(["error" => "Invalid operation"]);
         break;
 }
-
-
-//MUST REMEMBER
-//gwapa ko (naka default nani)({}, []);
-//hende ko na alam 
-//pero maganda ako >< <3
-// wowowowo = feedback name sa github
-//hay nako
-//ang image sa logobells dapat ilisan 
-//WALA KOY MOUSE :((
-//2029??!!!! the helly
-//ayoko na
-//tama na
