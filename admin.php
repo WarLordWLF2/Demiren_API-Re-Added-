@@ -2731,14 +2731,16 @@ class Admin_Functions
                             booking_charges_price,
                             booking_charges_quantity,
                             booking_charges_total,
-                            booking_charge_status
+                            booking_charge_status,
+                            booking_charge_datetime
                         ) VALUES (
                             :booking_room_id,
                             :charges_master_id,
                             :booking_charges_price,
                             :booking_charges_quantity,
                             :booking_charges_total,
-                            :booking_charge_status
+                            :booking_charge_status,
+                            NOW()
                         )";
 
                 $stmt = $conn->prepare($sql);
