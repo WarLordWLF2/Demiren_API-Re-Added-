@@ -313,7 +313,7 @@ class Demiren_customer
             $referenceNo = "REF" . date("YmdHis") . rand(100, 999);
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
-                (customers_id, customers_walk_in_id, guests_amnt, booking_downpayment, 
+                (customers_id, customers_walk_in_id, guests_amnt, booking_payment, 
                 booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
                 booking_totalAmount, booking_isArchive, reference_no, booking_fileName) 
             VALUES 
@@ -740,7 +740,7 @@ class Demiren_customer
         $sql = "SELECT 
                 a.roomtype_name,
                 b.roomnumber_id,
-                c.booking_downpayment,
+                c.booking_payment AS booking_downpayment,
                 e.room_beds,
                 e.room_sizes,
                 c.booking_created_at,
@@ -773,7 +773,7 @@ class Demiren_customer
         $sql = "SELECT 
                 a.roomtype_name,
                 b.roomnumber_id,
-                c.booking_downpayment,
+                c.booking_payment AS booking_downpayment,
                 e.room_beds,
                 e.room_sizes,
                 c.booking_created_at,
@@ -1067,7 +1067,7 @@ class Demiren_customer
                 c.booking_id,
                 a.roomtype_name,
                 e.roomnumber_id,
-                c.booking_downpayment,
+                c.booking_payment AS booking_downpayment,
                 e.room_beds,
                 e.room_sizes,
                 c.booking_created_at,
@@ -1223,13 +1223,13 @@ class Demiren_customer
             // ✅ First, create the booking master row
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
-                (customers_id, guests_amnt, customers_walk_in_id, booking_downpayment, 
+                (customers_id, guests_amnt, customers_walk_in_id, booking_payment, 
                 booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, booking_totalAmount) 
             VALUES 
-                (:customers_id, :guestTotalAmount, NULL, :booking_downpayment, 
+                (:customers_id, :guestTotalAmount, NULL, :booking_payment, 
                 :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), :totalAmount)");
             $stmt->bindParam(":customers_id", $customerId);
-            $stmt->bindParam(":booking_downpayment", $bookingDetails["downpayment"]);
+            $stmt->bindParam(":booking_payment", $bookingDetails["downpayment"]);
             $stmt->bindParam(":booking_checkin_dateandtime", $checkIn);
             $stmt->bindParam(":booking_checkout_dateandtime", $checkOut);
             $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
@@ -1383,16 +1383,16 @@ class Demiren_customer
             // If all rooms are available, proceed with booking
             $stmt = $conn->prepare("
             INSERT INTO tbl_booking 
-                (customers_id, guests_amnt, customers_walk_in_id, booking_downpayment, 
+                (customers_id, guests_amnt, customers_walk_in_id, booking_payment, 
                  booking_checkin_dateandtime, booking_checkout_dateandtime, booking_created_at, 
                  children, adult, booking_totalAmount) 
             VALUES 
-                (:customers_id, :guestTotalAmount, NULL, :booking_downpayment, 
+                (:customers_id, :guestTotalAmount, NULL, :booking_payment, 
                  :booking_checkin_dateandtime, :booking_checkout_dateandtime, NOW(), 
                  :children, :adult, :totalAmount)
         ");
             $stmt->bindParam(":customers_id", $customerId);
-            $stmt->bindParam(":booking_downpayment", $bookingDetails["downpayment"]);
+            $stmt->bindParam(":booking_payment", $bookingDetails["downpayment"]);
             $stmt->bindParam(":booking_checkin_dateandtime", $checkIn);
             $stmt->bindParam(":booking_checkout_dateandtime", $checkOut);
             $stmt->bindParam(":totalAmount", $bookingDetails["totalAmount"]);
@@ -1428,7 +1428,8 @@ class Demiren_customer
 
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
         $sql = "SELECT a.*, b.*, c.*, d.*, 
-            IFNULL(f.booking_status_name, 'Pending') AS booking_status_name
+            IFNULL(f.booking_status_name, 'Pending') AS booking_status_name,
+            a.booking_payment AS booking_downpayment
             FROM tbl_booking a
             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
@@ -1506,7 +1507,7 @@ class Demiren_customer
         $json = json_decode($json, true);
 
         $bookingCustomerId = $json['booking_customer_id'] ?? 0;
-        $sql = "SELECT a.*, b.*, c.*, d.*, f.booking_status_name
+        $sql = "SELECT a.*, b.*, c.*, d.*, f.booking_status_name, a.booking_payment AS booking_downpayment
             FROM tbl_booking a
             LEFT JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             LEFT JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
@@ -1607,7 +1608,7 @@ class Demiren_customer
             // 4️⃣ Update booking total and downpayment
             $sql = "UPDATE tbl_booking 
                 SET booking_totalAmount = :newTotal, 
-                    booking_downpayment = :newDownpayment
+                    booking_payment = :newDownpayment
                 WHERE booking_id = :bookingId";
             $stmt = $conn->prepare($sql);
             $stmt->bindParam(':newTotal', $newTotal);
@@ -1708,7 +1709,8 @@ class Demiren_customer
                    h.charges_category_id,
                    h.charges_category_name,
                    IFNULL(i.charges_status_name, 'Pending') AS charges_status_name,
-                   IFNULL(f.booking_charge_status, 1) AS booking_charge_status
+                   IFNULL(f.booking_charge_status, 1) AS booking_charge_status,
+                   a.booking_payment AS booking_downpayment
             FROM tbl_booking a
             INNER JOIN tbl_booking_room b ON b.booking_id = a.booking_id
             INNER JOIN tbl_roomtype c ON c.roomtype_id = b.roomtype_id
