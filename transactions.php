@@ -62,21 +62,43 @@ class Transactions
         $booking_id = $booking['booking_id'];
         $employee_id = isset($json['employee_id']) ? intval($json['employee_id']) : null;
 
-        // Safeguards: require valid employee_id and validate active
+        // Safeguards: prefer valid employee, but do not block if missing/invalid
         if (empty($employee_id) || $employee_id <= 0) {
-            echo 'invalid_employee';
-            return;
-        }
-        $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
-        $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
-        $empStmt->execute();
-        $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
-        if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
-            echo 'invalid_employee';
-            return;
+            // Try fallback to first active employee
+            try {
+                $fallback = $conn->prepare("SELECT employee_id FROM tbl_employee WHERE employee_status NOT IN ('Inactive','Disabled',0,'0') ORDER BY employee_id ASC LIMIT 1");
+                $fallback->execute();
+                $fb = $fallback->fetch(PDO::FETCH_ASSOC);
+                if ($fb && isset($fb['employee_id'])) {
+                    $employee_id = intval($fb['employee_id']);
+                } else {
+                    // Proceed with null; history insert may still succeed if FK not enforced
+                    $employee_id = 0;
+                }
+            } catch (Exception $e) {
+                $employee_id = 0;
+            }
+        } else {
+            $empStmt = $conn->prepare("SELECT employee_id, employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+            $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+            $empStmt->execute();
+            $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$empRow || $empRow["employee_status"] == 0 || $empRow["employee_status"] === 'Inactive' || $empRow["employee_status"] === 'Disabled') {
+                // Fallback to any active employee
+                try {
+                    $fallback = $conn->prepare("SELECT employee_id FROM tbl_employee WHERE employee_status NOT IN ('Inactive','Disabled',0,'0') ORDER BY employee_id ASC LIMIT 1");
+                    $fallback->execute();
+                    $fb = $fallback->fetch(PDO::FETCH_ASSOC);
+                    if ($fb && isset($fb['employee_id'])) {
+                        $employee_id = intval($fb['employee_id']);
+                    }
+                } catch (Exception $e) {
+                    // Proceed non-blocking
+                }
+            }
         }
 
-        // Assign rooms to booking_room
+        // Assign rooms to booking_room (do not change occupancy here)
         foreach ($selected_room_ids as $room_id) {
             $stmt = $conn->prepare("
             UPDATE tbl_booking_room 
@@ -87,17 +109,25 @@ class Transactions
             $stmt->bindParam(':room_id', $room_id);
             $stmt->bindParam(':booking_id', $booking_id);
             $stmt->execute();
-
-            // Update room status to occupied (1)
-            $stmt = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 1 WHERE roomnumber_id = :room_id");
-            $stmt->bindParam(':room_id', $room_id);
-            $stmt->execute();
         }
 
-        // Insert into history
-        $stmt = $conn->prepare("INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at) VALUES (:id, :emp, 2, NOW())");
+        // Insert Reserved/Confirmed status dynamically based on name; occupancy updates happen on check-in via changeBookingStatus
+        $stRows = $conn->query("SELECT booking_status_id, booking_status_name FROM tbl_booking_status")->fetchAll(PDO::FETCH_ASSOC);
+        $findId = function($rows, $cands) {
+            foreach ($rows as $r) {
+                $name = strtolower(trim($r['booking_status_name']));
+                foreach ($cands as $c) {
+                    if ($name === strtolower($c)) { return intval($r['booking_status_id']); }
+                }
+            }
+            return null;
+        };
+        $reservedId = $findId($stRows, ['Reserved','Confirmed','Approved']);
+        if ($reservedId === null) { $reservedId = 2; }
+        $stmt = $conn->prepare("INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at) VALUES (:id, :emp, :sid, NOW())");
         $stmt->bindParam(':id', $booking_id);
         $stmt->bindParam(':emp', $employee_id);
+        $stmt->bindParam(':sid', $reservedId, PDO::PARAM_INT);
         $result = $stmt->execute();
 
         echo $result ? 'success' : 'fail';
@@ -357,13 +387,13 @@ class Transactions
         }
     }
 
-
-
     function createInvoice($json)
     {
         include "connection.php";
         $json = json_decode($json, true);
+        // Accept both billing_ids and booking_id; resolve billing_ids from booking_id if needed
         $billing_ids = isset($json["billing_ids"]) && is_array($json["billing_ids"]) ? $json["billing_ids"] : [];
+        $booking_id_input = isset($json["booking_id"]) ? intval($json["booking_id"]) : null;
         $employee_id = isset($json["employee_id"]) ? intval($json["employee_id"]) : null;
         $payment_method_id = $json["payment_method_id"] ?? 2; // Default to Cash
         $invoice_status_id = 1; // Always set to Complete for checkout scenarios
@@ -373,12 +403,8 @@ class Transactions
         // NEW: Delivery options
         $delivery_mode = isset($json["delivery_mode"]) ? $json["delivery_mode"] : 'both'; // 'email'|'pdf'|'both'
         $email_to = isset($json["email_to"]) ? $json["email_to"] : null;
-    
-        // Safeguards: ensure billing_ids present and employee_id valid; validate employee exists and is active
-        if (empty($billing_ids)) {
-            echo json_encode(["success" => false, "message" => "Missing required field: billing_ids"]);
-            return;
-        }
+
+        // Validate employee early (needed for potential billing creation)
         if (empty($employee_id) || $employee_id <= 0) {
             echo json_encode(["success" => false, "message" => "Missing or invalid employee_id"]);
             return;
@@ -394,6 +420,63 @@ class Transactions
         $status = $empRow["employee_status"];
         if ($status === 'Inactive' || $status === 'Disabled' || $status === '0' || $status === 0) {
             echo json_encode(["success" => false, "message" => "Employee is not active"]);
+            return;
+        }
+
+        // Resolve billing_ids using booking_id if none provided
+        if (empty($billing_ids) && !empty($booking_id_input)) {
+            try {
+                $fetchBills = $conn->prepare("SELECT billing_id FROM tbl_billing WHERE booking_id = :booking_id ORDER BY billing_id ASC");
+                $fetchBills->bindParam(':booking_id', $booking_id_input, PDO::PARAM_INT);
+                $fetchBills->execute();
+                $rows = $fetchBills->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $r) { $billing_ids[] = intval($r['billing_id']); }
+            } catch (Exception $_) {}
+
+            // If still none, create a comprehensive billing record now
+            if (empty($billing_ids)) {
+                try {
+                    $bdStmt = $conn->prepare("SELECT booking_payment AS booking_downpayment FROM tbl_booking WHERE booking_id = :booking_id");
+                    $bdStmt->bindParam(':booking_id', $booking_id_input, PDO::PARAM_INT);
+                    $bdStmt->execute();
+                    $bdRow = $bdStmt->fetch(PDO::FETCH_ASSOC);
+                    $booking_downpayment = $bdRow ? intval($bdRow['booking_downpayment']) : 0;
+
+                    $breakdown = $this->calculateComprehensiveBillingInternal($conn, $booking_id_input, $discount_id, $vat_rate, $booking_downpayment);
+                    if (!empty($breakdown) && isset($breakdown['success']) && $breakdown['success']) {
+                        $invoice_number = 'BILL' . date('YmdHis') . rand(100, 999);
+                        $ins = $conn->prepare("
+                            INSERT INTO tbl_billing (
+                                booking_id, employee_id, payment_method_id, discounts_id,
+                                billing_dateandtime, billing_invoice_number, billing_downpayment, 
+                                billing_vat, billing_total_amount, billing_balance
+                            ) VALUES (
+                                :booking_id, :employee_id, :payment_method_id, :discount_id,
+                                NOW(), :invoice_number, :downpayment, 
+                                :vat_amount, :total_amount, :balance
+                            )
+                        ");
+                        $vat_amount = 0;
+                        $ins->bindParam(':booking_id', $booking_id_input, PDO::PARAM_INT);
+                        $ins->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
+                        $ins->bindParam(':payment_method_id', $payment_method_id, PDO::PARAM_INT);
+                        $ins->bindParam(':discount_id', $discount_id);
+                        $ins->bindParam(':invoice_number', $invoice_number);
+                        $ins->bindParam(':downpayment', $booking_downpayment);
+                        $ins->bindParam(':vat_amount', $vat_amount);
+                        $ins->bindParam(':total_amount', $breakdown['final_total']);
+                        $ins->bindParam(':balance', $breakdown['balance']);
+                        if ($ins->execute()) {
+                            $billing_ids[] = intval($conn->lastInsertId());
+                        }
+                    }
+                } catch (Exception $_) {}
+            }
+        }
+
+        // Final safeguard
+        if (empty($billing_ids)) {
+            echo json_encode(["success" => false, "message" => "Missing required field: billing_ids or booking_id"]);
             return;
         }
     
@@ -488,7 +571,7 @@ class Transactions
                 $additionalCharges = $chargesQuery->fetchAll(PDO::FETCH_ASSOC);
 
                 // Render invoice HTML
-                $customerStmt = $conn->prepare("SELECT CONCAT(c.customers_fname,' ',c.customers_lname) AS customer_fullname, c.customers_email FROM tbl_booking b LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id WHERE b.booking_id = :booking_id");
+                $customerStmt = $conn->prepare("SELECT b.reference_no, CONCAT(c.customers_fname,' ',c.customers_lname) AS customer_fullname, c.customers_email FROM tbl_booking b LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id WHERE b.booking_id = :booking_id");
                 $customerStmt->bindParam(':booking_id', $booking_id, PDO::PARAM_INT);
                 $customerStmt->execute();
                 $customerRow = $customerStmt->fetch(PDO::FETCH_ASSOC);
@@ -504,10 +587,15 @@ class Transactions
                 }
                 $subtotalN = ($billingBreakdown['room_total'] ?? 0) + ($billingBreakdown['charge_total'] ?? 0);
                 $subtotal = number_format($subtotalN, 2);
-                $downpaymentFmt = number_format($billingBreakdown['downpayment'] ?? 0, 2);
-                $balanceFmt = number_format($billingBreakdown['balance'] ?? 0, 2);
+                $roomTotalFmt = number_format($billingBreakdown['room_total'] ?? 0, 2);
+                $vatFmt = number_format($billingBreakdown['vat_amount'] ?? 0, 2);
+                $finalTotalFmt = number_format($billingBreakdown['final_total'] ?? $subtotalN, 2);
+                $amountPaidFmt = $finalTotalFmt;
+                $balanceFmt = number_format(0, 2);
 
-                $invoiceHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#333}.wrapper{max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}h1{letter-spacing:4px;font-size:28px}.meta{font-size:14px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4;text-align:left}.totals{margin-top:20px;width:50%;float:right}.totals td{border:none}.notes{margin-top:40px;font-size:12px;color:#555}</style></head><body><div class="wrapper">' . '<div class="header"><div><div class="meta">Demiren Hotel & Restaurant</div><div class="meta">Customer: ' . htmlspecialchars($customerRow['customer_fullname'] ?? 'Guest') . '</div></div>' . '<div><h1>INVOICE</h1><div class="meta">Invoice #: ' . intval($invoice_id) . '</div><div class="meta">Invoice Date: ' . $issueDate . '</div></div></div>' . '<table><thead><tr><th>Item</th><th>Unit Price</th><th>Quantity</th><th>Amount</th></tr></thead><tbody>' . $rows . '</tbody></table>' . '<table class="totals"><tr><td>Subtotal</td><td>' . $subtotal . '</td></tr><tr><td>Amount Paid</td><td>' . $downpaymentFmt . '</td></tr><tr><td><strong>Balance Due</strong></td><td><strong>' . $balanceFmt . '</strong></td></tr></table>' . '<div class="notes">Thank you for staying with us.</div></div></body></html>';
+                $refNo = $customerRow['reference_no'] ?? '';
+
+                $invoiceHtml = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;color:#333}.wrapper{max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}h1{letter-spacing:4px;font-size:28px}.meta{font-size:14px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:8px}th{background:#f4f4f4;text-align:left}.totals{margin-top:20px;width:50%;float:right}.totals td{border:none}.notes{margin-top:40px;font-size:12px;color:#555}</style></head><body><div class="wrapper">' . '<div class="header"><div><div class="meta">Demiren Hotel & Restaurant</div><div class="meta">Customer: ' . htmlspecialchars($customerRow['customer_fullname'] ?? 'Guest') . '</div><div class="meta">Reference #: ' . htmlspecialchars($refNo) . '</div></div>' . '<div><h1>INVOICE</h1><div class="meta">Invoice #: ' . intval($invoice_id) . '</div><div class="meta">Invoice Date: ' . $issueDate . '</div></div></div>' . '<table><thead><tr><th>Item</th><th>Unit Price</th><th>Quantity</th><th>Amount</th></tr></thead><tbody>' . $rows . '</tbody></table>' . '<table class="totals"><tr><td>Original Room Price</td><td>' . $roomTotalFmt . '</td></tr><tr><td>Subtotal</td><td>' . $subtotal . '</td></tr><tr><td>VAT (12%)</td><td>' . $vatFmt . '</td></tr><tr><td>Amount Paid</td><td>' . $amountPaidFmt . '</td></tr><tr><td><strong>Balance Due</strong></td><td><strong>' . $balanceFmt . '</strong></td></tr></table>' . '<div class="notes">Thank you for staying with us.</div></div></body></html>';
 
                 // Send email if requested
                 $email_status = null;
@@ -522,13 +610,21 @@ class Transactions
                 $pdf_url = null;
                 if (in_array($delivery_mode, ['pdf','both'])) {
                     try {
-                        // Try autoload from local vendor, then project root vendor
+                        // Try autoload from local vendor, project root vendor, then packaged dompdf
                         $localAutoload = __DIR__ . '/vendor/autoload.php';
                         $rootAutoload = dirname(__DIR__) . '/vendor/autoload.php';
+                        $dompdfAutoload = __DIR__ . '/dompdf/autoload.inc.php';
                         if (file_exists($localAutoload)) {
                             require_once $localAutoload;
-                        } elseif (file_exists($rootAutoload)) {
+                        }
+                        if (!class_exists('\\Dompdf\\Dompdf') && file_exists($rootAutoload)) {
                             require_once $rootAutoload;
+                        }
+                        if (!class_exists('\\Dompdf\\Dompdf') && file_exists($dompdfAutoload)) {
+                            require_once $dompdfAutoload;
+                        }
+                        if (!class_exists('\\Dompdf\\Dompdf')) {
+                            throw new \Exception('Dompdf autoloader not found');
                         }
 
                         // Initialize Dompdf options (compatible across versions)
@@ -546,20 +642,50 @@ class Transactions
                         if (!is_dir($pdfDir)) { @mkdir($pdfDir, 0777, true); }
                         $pdfName = 'invoice_' . $booking_id . '_' . $invoice_id . '_' . date('YmdHis') . '.pdf';
                         $pdfPath = $pdfDir . DIRECTORY_SEPARATOR . $pdfName;
-                        $bytes = @file_put_contents($pdfPath, $dompdf->output());
-                        if ($bytes !== false) {
-                            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-                            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                            $scriptDir = rtrim(str_replace('\\\\','/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
-                            $baseUrl = $scheme . '://' . $host . $scriptDir . '/';
-                            $pdf_url = $baseUrl . 'invoices/' . $pdfName;
-                        } else {
+                        $pdfContent = $dompdf->output();
+                        if ($pdfContent === false || strlen($pdfContent) === 0) {
+                            @file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . 'email_debug.log', date('c') . " dompdf output empty for booking {$booking_id}, invoice {$invoice_id}\n", FILE_APPEND);
                             $pdf_url = null;
+                        } else {
+                            $bytes = @file_put_contents($pdfPath, $pdfContent);
+                            if ($bytes !== false) {
+                                $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+                                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                                $scriptDir = rtrim(str_replace('\\\\','/', dirname($_SERVER['SCRIPT_NAME'] ?? '/')), '/');
+                                $baseUrl = $scheme . '://' . $host . $scriptDir . '/';
+                                $pdf_url = $baseUrl . 'invoices/' . $pdfName;
+                            } else {
+                                @file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . 'email_debug.log', date('c') . " file_put_contents failed for {$pdfPath}\n", FILE_APPEND);
+                                $pdf_url = null;
+                            }
                         }
                     } catch (\Throwable $e) {
+                        @file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . 'email_debug.log', date('c') . " dompdf exception: " . $e->getMessage() . "\n", FILE_APPEND);
                         $pdf_url = null;
                     }
                 }
+
+                // 6. Update room status to Vacant (3) for check-out
+                $roomUpdateStmt = $conn->prepare("
+                    UPDATE tbl_rooms 
+                    SET room_status_id = 3 
+                    WHERE roomnumber_id IN (
+                        SELECT br.roomnumber_id 
+                        FROM tbl_booking_room br 
+                        WHERE br.booking_id = :booking_id
+                    )
+                ");
+                $roomUpdateStmt->bindParam(':booking_id', $booking_id);
+                $roomUpdateStmt->execute();
+
+                // 7. Update booking status to Checked-Out (6) in booking history
+                $statusUpdateStmt = $conn->prepare("
+                    INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at) 
+                    VALUES (:booking_id, :employee_id, 6, NOW())
+                ");
+                $statusUpdateStmt->bindParam(':booking_id', $booking_id);
+                $statusUpdateStmt->bindParam(':employee_id', $employee_id);
+                $statusUpdateStmt->execute();
 
                 $results[] = [
                     "billing_id" => $billing_id,
@@ -660,8 +786,12 @@ class Transactions
             // 5. Calculate amount after discount
             $amount_after_discount = $subtotal - $discount_amount;
 
-            // 6. Calculate final total (VAT removed)
-            $final_total = $amount_after_discount;
+            // 6. Calculate VAT (if provided) and final total
+            $vat_amount = 0;
+            if ($vat_rate && $vat_rate > 0) {
+                $vat_amount = $amount_after_discount * ($vat_rate / 100.0);
+            }
+            $final_total = $amount_after_discount + $vat_amount;
 
             // 7. Calculate balance after downpayment
             $balance = $final_total - $downpayment;
@@ -673,6 +803,7 @@ class Transactions
                 "subtotal" => $subtotal,
                 "discount_amount" => $discount_amount,
                 "amount_after_discount" => $amount_after_discount,
+                "vat_amount" => $vat_amount,
                 "final_total" => $final_total,
                 "downpayment" => $downpayment,
                 "balance" => $balance,

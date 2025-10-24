@@ -67,9 +67,7 @@ class Admin_Functions
                 throw new Exception("No booking room found for this booking");
             }
 
-            // Keep room status Occupied
-            $updateRoomStatus = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 1 WHERE roomnumber_id = :room_id");
-            $updateRoomStatus->execute([':room_id' => $originalBookingRoom['roomnumber_id']]);
+            // Occupancy remains unchanged here; check-in/out will update via changeBookingStatus
 
             // Ensure charges master exists for Room Extended Stay (schema without status column)
             $checkChargesMaster = $conn->prepare("SELECT charges_master_id FROM tbl_charges_master WHERE charges_master_name = 'Room Extended Stay' LIMIT 1");
@@ -657,6 +655,73 @@ class Admin_Functions
     function viewRoomTypes()
     {
         $this->view_room_types();
+    }
+
+    // Update room type details (price and description)
+    function updateRoomType($json)
+    {
+        include "connection.php";
+        try {
+            $data = is_string($json) ? json_decode($json, true) : (is_array($json) ? $json : []);
+            
+            $roomtype_id = intval($data['roomtype_id'] ?? 0);
+            $roomtype_name = trim($data['roomtype_name'] ?? '');
+            $roomtype_description = trim($data['roomtype_description'] ?? '');
+            $roomtype_price = floatval($data['roomtype_price'] ?? 0);
+
+            if ($roomtype_id <= 0) {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => false, 'message' => 'Invalid room type ID']);
+                return;
+            }
+
+            if (empty($roomtype_name)) {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => false, 'message' => 'Room type name is required']);
+                return;
+            }
+
+            if ($roomtype_price <= 0) {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => false, 'message' => 'Room type price must be greater than 0']);
+                return;
+            }
+
+            // Check if room type exists
+            $checkStmt = $conn->prepare("SELECT roomtype_id FROM tbl_roomtype WHERE roomtype_id = :roomtype_id");
+            $checkStmt->bindParam(':roomtype_id', $roomtype_id, PDO::PARAM_INT);
+            $checkStmt->execute();
+            
+            if ($checkStmt->rowCount() === 0) {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => false, 'message' => 'Room type not found']);
+                return;
+            }
+
+            // Update room type
+            $sql = "UPDATE tbl_roomtype SET 
+                        roomtype_name = :roomtype_name,
+                        roomtype_description = :roomtype_description,
+                        roomtype_price = :roomtype_price
+                    WHERE roomtype_id = :roomtype_id";
+            
+            $stmt = $conn->prepare($sql);
+            $stmt->bindParam(':roomtype_name', $roomtype_name, PDO::PARAM_STR);
+            $stmt->bindParam(':roomtype_description', $roomtype_description, PDO::PARAM_STR);
+            $stmt->bindParam(':roomtype_price', $roomtype_price, PDO::PARAM_STR);
+            $stmt->bindParam(':roomtype_id', $roomtype_id, PDO::PARAM_INT);
+            
+            if ($stmt->execute()) {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => true, 'message' => 'Room type updated successfully']);
+            } else {
+                if (ob_get_length()) { ob_clean(); }
+                echo json_encode(['success' => false, 'message' => 'Failed to update room type']);
+            }
+        } catch (Exception $e) {
+            if (ob_get_length()) { ob_clean(); }
+            echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
+        }
     }
 
     // New: viewCharges for ChargeMaster page
@@ -1275,23 +1340,64 @@ class Admin_Functions
             $booking_id = intval($data['booking_id'] ?? 0);
             $employee_id = intval($data['employee_id'] ?? 0);
             $status_id = intval($data['booking_status_id'] ?? 0);
+            $status_name = isset($data['booking_status_name']) ? trim($data['booking_status_name']) : null;
             $provided_room_ids = (isset($data['room_ids']) && is_array($data['room_ids'])) ? $data['room_ids'] : null;
 
-            if ($booking_id <= 0 || $employee_id <= 0 || $status_id <= 0) {
+            // Allow either status_id or status_name
+            if ($booking_id <= 0 || $employee_id <= 0 || ($status_id <= 0 && empty($status_name))) {
                 if (ob_get_length()) { ob_clean(); }
                 echo json_encode(['success' => false, 'message' => 'Missing parameters']);
                 return;
             }
 
-            // Validate employee
-            $empStmt = $conn->prepare("SELECT employee_status FROM tbl_employee WHERE employee_id = :employee_id");
+            // If only status_name provided, map to id; if id provided, fetch canonical name
+            if ($status_id <= 0 && !empty($status_name)) {
+                $sidStmt = $conn->prepare("SELECT booking_status_id FROM tbl_booking_status WHERE LOWER(booking_status_name) = LOWER(:name) LIMIT 1");
+                $sidStmt->bindParam(':name', $status_name, PDO::PARAM_STR);
+                $sidStmt->execute();
+                $sidRow = $sidStmt->fetch(PDO::FETCH_ASSOC);
+                $status_id = $sidRow ? intval($sidRow['booking_status_id']) : 0;
+            } else if ($status_id > 0 && empty($status_name)) {
+                $snameStmt = $conn->prepare("SELECT booking_status_name FROM tbl_booking_status WHERE booking_status_id = :sid LIMIT 1");
+                $snameStmt->bindParam(':sid', $status_id, PDO::PARAM_INT);
+                $snameStmt->execute();
+                $snameRow = $snameStmt->fetch(PDO::FETCH_ASSOC);
+                $status_name = $snameRow ? $snameRow['booking_status_name'] : null;
+            }
+
+            // Normalize for downstream logic
+            $nm = strtolower(trim($status_name ?? ''));
+
+            // Fallback synonym mapping if status_id unresolved
+            if ($status_id <= 0 && !empty($nm)) {
+                $rows = $conn->query("SELECT booking_status_id, booking_status_name FROM tbl_booking_status")->fetchAll(PDO::FETCH_ASSOC);
+                $synCheckIn = ['checked-in','checked in','check-in','check in'];
+                $synCheckOut = ['checked-out','checked out','check-out','check out'];
+                $synCancelled = ['cancelled','canceled'];
+                foreach ($rows as $r) {
+                    $rn = strtolower(trim($r['booking_status_name']));
+                    if (in_array($rn, $synCheckIn) && in_array($nm, $synCheckIn)) { $status_id = intval($r['booking_status_id']); break; }
+                    if (in_array($rn, $synCheckOut) && in_array($nm, $synCheckOut)) { $status_id = intval($r['booking_status_id']); break; }
+                    if (in_array($rn, $synCancelled) && in_array($nm, $synCancelled)) { $status_id = intval($r['booking_status_id']); break; }
+                }
+            }
+
+            // Validate employee (non-blocking). If invalid, fallback to first active employee or proceed.
+            $empStmt = $conn->prepare("SELECT employee_id, employee_status FROM tbl_employee WHERE employee_id = :employee_id");
             $empStmt->bindParam(':employee_id', $employee_id, PDO::PARAM_INT);
             $empStmt->execute();
             $empRow = $empStmt->fetch(PDO::FETCH_ASSOC);
             if (!$empRow || $empRow['employee_status'] == 0 || $empRow['employee_status'] === 'Inactive' || $empRow['employee_status'] === 'Disabled') {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'message' => 'Invalid employee']);
-                return;
+                try {
+                    $fallback = $conn->prepare("SELECT employee_id FROM tbl_employee WHERE employee_status NOT IN ('Inactive','Disabled',0,'0') ORDER BY employee_id ASC LIMIT 1");
+                    $fallback->execute();
+                    $fb = $fallback->fetch(PDO::FETCH_ASSOC);
+                    if ($fb && isset($fb['employee_id'])) {
+                        $employee_id = intval($fb['employee_id']);
+                    }
+                } catch (Exception $e) {
+                    // Continue without blocking
+                }
             }
 
             // Validate booking
@@ -1325,19 +1431,88 @@ class Admin_Functions
             $hist->bindParam(':status_id', $status_id);
             $hist->execute();
 
-            // Sync room occupancy based on status
+            // Fallback: on Checked-In, auto-assign vacant rooms to booking if none assigned
+            if (in_array($nm, ['checked-in','checked in']) && empty($room_ids)) {
+                $missingStmt = $conn->prepare("SELECT booking_room_id, roomtype_id FROM tbl_booking_room WHERE booking_id = :booking_id AND roomnumber_id IS NULL");
+                $missingStmt->bindParam(':booking_id', $booking_id, PDO::PARAM_INT);
+                $missingStmt->execute();
+                $missingRows = $missingStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $allocated = [];
+                foreach ($missingRows as $mr) {
+                    $rt = intval($mr['roomtype_id']);
+                    // Find first vacant room of this type
+                    $vacantStmt = $conn->prepare("SELECT roomnumber_id FROM tbl_rooms WHERE roomtype_id = :rt AND room_status_id = 3 ORDER BY roomnumber_id ASC LIMIT 1");
+                    $vacantStmt->bindParam(':rt', $rt, PDO::PARAM_INT);
+                    $vacantStmt->execute();
+                    $vac = $vacantStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($vac && isset($vac['roomnumber_id'])) {
+                        $rn = intval($vac['roomnumber_id']);
+                        // Assign to booking_room
+                        $assignStmt = $conn->prepare("UPDATE tbl_booking_room SET roomnumber_id = :rn WHERE booking_room_id = :br_id");
+                        $assignStmt->execute([':rn' => $rn, ':br_id' => intval($mr['booking_room_id'])]);
+                        $allocated[] = $rn;
+                    }
+                }
+                if (!empty($allocated)) {
+                    $room_ids = $allocated; // use newly assigned room numbers
+                }
+            }
+
+            // Sync room occupancy based on status - using canonical status name
             if (!empty($room_ids)) {
+                $isCheckIn = in_array($nm, ['checked-in','checked in']);
+                $isVacate = in_array($nm, ['checked-out','checked out','cancelled']);
+
                 $roomUpdateStatus = null;
-                if ($status_id === 5) { // Checked-In
+                if ($isCheckIn) {
                     $roomUpdateStatus = 1; // Occupied
-                } else if ($status_id === 3 || $status_id === 6) { // Cancelled or Checked-Out
+                } else if ($isVacate) {
                     $roomUpdateStatus = 3; // Vacant
                 }
                 if ($roomUpdateStatus !== null) {
                     $update = $conn->prepare("UPDATE tbl_rooms SET room_status_id = :rs WHERE roomnumber_id = :rn");
                     foreach ($room_ids as $rn) {
-                        $update->execute([':rs' => $roomUpdateStatus, ':rn' => $rn]);
+                        $result = $update->execute([':rs' => $roomUpdateStatus, ':rn' => $rn]);
+                        if (!$result) {
+                            error_log("Failed to update room status for room $rn to status $roomUpdateStatus");
+                        }
                     }
+                }
+            }
+
+            // Final safeguard: sync by booking join in case no room_ids were passed/found
+            // This ensures room status is ALWAYS updated regardless of triggers
+            // Recompute dynamic status IDs locally to avoid scope issues
+            $stRows2 = $conn->query("SELECT booking_status_id, booking_status_name FROM tbl_booking_status")->fetchAll(PDO::FETCH_ASSOC);
+            $findId2 = function($rows, $cands) {
+                foreach ($rows as $r) {
+                    $name = strtolower(trim($r['booking_status_name']));
+                    foreach ($cands as $c) {
+                        if ($name === strtolower($c)) { return intval($r['booking_status_id']); }
+                    }
+                }
+                return null;
+            };
+            $isCheckIn2 = in_array($nm, ['checked-in','checked in']);
+            $isVacate2 = in_array($nm, ['checked-out','checked out','cancelled']);
+
+            if ($isCheckIn2 || $isVacate2) {
+                $roomUpdateStatus = ($isCheckIn2) ? 1 : 3;
+                $joinUpdate = $conn->prepare(
+                    "UPDATE tbl_rooms r 
+                     JOIN tbl_booking_room br ON br.roomnumber_id = r.roomnumber_id 
+                     SET r.room_status_id = :rs 
+                     WHERE br.booking_id = :booking_id 
+                       AND br.roomnumber_id IS NOT NULL"
+                );
+                $result = $joinUpdate->execute([':rs' => $roomUpdateStatus, ':booking_id' => $booking_id]);
+                $affectedRows = $joinUpdate->rowCount();
+                
+                if (!$result) {
+                    error_log("Failed to update room status via join for booking $booking_id");
+                } else {
+                    error_log("Updated $affectedRows room(s) to status $roomUpdateStatus for booking $booking_id");
                 }
             }
 
@@ -2258,18 +2433,28 @@ class Admin_Functions
             foreach ($room_ids as $rn) {
                 $upd = $conn->prepare("UPDATE tbl_booking_room SET roomnumber_id = :rn WHERE booking_id = :bid AND roomnumber_id IS NULL LIMIT 1");
                 $upd->execute([':rn' => $rn, ':bid' => $booking_id]);
-                // Mark room as Occupied
-                $rm = $conn->prepare("UPDATE tbl_rooms SET room_status_id = 1 WHERE roomnumber_id = :rn");
-                $rm->execute([':rn' => $rn]);
+                // Do NOT change room_status_id on approval; occupancy should change only on actual check-in
             }
 
             // Update booking totals (store provided amounts)
             $updBook = $conn->prepare("UPDATE tbl_booking SET booking_totalAmount = :total, booking_payment = :down WHERE booking_id = :bid");
             $updBook->execute([':total' => $total, ':down' => $down, ':bid' => $booking_id]);
 
-            // Insert status history as Approved/Confirmed (status_id = 2)
-            $hist = $conn->prepare("INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at) VALUES (:bid, :eid, 2, NOW())");
-            $hist->execute([':bid' => $booking_id, ':eid' => $employee_id]);
+            // Insert status history as Reserved/Confirmed using dynamic status ID
+            $stRows = $conn->query("SELECT booking_status_id, booking_status_name FROM tbl_booking_status")->fetchAll(PDO::FETCH_ASSOC);
+            $findId = function($rows, $cands) {
+                foreach ($rows as $r) {
+                    $name = strtolower(trim($r['booking_status_name']));
+                    foreach ($cands as $c) {
+                        if ($name === strtolower($c)) { return intval($r['booking_status_id']); }
+                    }
+                }
+                return null;
+            };
+            $approvedId = $findId($stRows, ['Reserved','Confirmed','Approved']);
+            if ($approvedId === null) { $approvedId = 2; }
+            $hist = $conn->prepare("INSERT INTO tbl_booking_history (booking_id, employee_id, status_id, updated_at) VALUES (:bid, :eid, :sid, NOW())");
+            $hist->execute([':bid' => $booking_id, ':eid' => $employee_id, ':sid' => $approvedId]);
 
             $conn->commit();
             if (ob_get_length()) { ob_clean(); }
@@ -2298,6 +2483,9 @@ switch ($method) {
         break;
     case 'viewRoomTypes':
         $admin->viewRoomTypes();
+        break;
+    case 'updateRoomType':
+        $admin->updateRoomType($json);
         break;
     case 'viewCharges':
         $admin->viewCharges();
