@@ -2,6 +2,64 @@
 include "headers.php";
 class Admin_Functions
 {
+    function calculateBookingTotalAndBalance($data)
+    {
+        include "connection.php";
+        try {
+            $booking_id = intval($data["booking_id"] ?? 0);
+            
+            if ($booking_id <= 0) {
+                if (ob_get_length()) { ob_clean(); }
+                return json_encode(['success' => false, 'message' => 'Invalid booking ID']);
+            }
+            
+            // Get sum of billing_total_amount from tbl_billing
+            $billingTotalQuery = "SELECT SUM(billing_total_amount) as billing_total, 
+                                         SUM(billing_vat) as billing_vat,
+                                         SUM(billing_downpayment) as total_payments
+                                  FROM tbl_billing 
+                                  WHERE booking_id = :booking_id";
+            $billingStmt = $conn->prepare($billingTotalQuery);
+            $billingStmt->bindParam(':booking_id', $booking_id);
+            $billingStmt->execute();
+            $billingData = $billingStmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Get sum of booking_charges_total from tbl_booking_charges
+            $chargesQuery = "SELECT SUM(bc.booking_charges_total) as charges_total
+                            FROM tbl_booking_charges bc
+                            JOIN tbl_booking_room br ON bc.booking_room_id = br.booking_room_id
+                            WHERE br.booking_id = :booking_id";
+            $chargesStmt = $conn->prepare($chargesQuery);
+            $chargesStmt->bindParam(':booking_id', $booking_id);
+            $chargesStmt->execute();
+            $chargesData = $chargesStmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Calculate totals
+            $billingTotal = floatval($billingData['billing_total'] ?? 0);
+            $billingVat = floatval($billingData['billing_vat'] ?? 0);
+            $chargesTotal = floatval($chargesData['charges_total'] ?? 0);
+            $totalPayments = floatval($billingData['total_payments'] ?? 0);
+            
+            // Calculate total amount due and remaining balance
+            $totalAmountDue = $billingTotal + $billingVat + $chargesTotal;
+            $remainingBalance = $totalAmountDue - $totalPayments;
+            
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode([
+                'success' => true,
+                'booking_id' => $booking_id,
+                'billing_total' => $billingTotal,
+                'billing_vat' => $billingVat,
+                'charges_total' => $chargesTotal,
+                'total_payments' => $totalPayments,
+                'total_amount_due' => $totalAmountDue,
+                'remaining_balance' => $remainingBalance
+            ]);
+        } catch (Exception $e) {
+            if (ob_get_length()) { ob_clean(); }
+            return json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
     function setVisitorApproval()
     {
         include "connection.php";
