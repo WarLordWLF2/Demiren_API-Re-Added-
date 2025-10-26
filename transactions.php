@@ -583,7 +583,8 @@ class Transactions
                 $customerStmt->bindParam(':booking_id', $booking_id, PDO::PARAM_INT);
                 $customerStmt->execute();
                 $customerRow = $customerStmt->fetch(PDO::FETCH_ASSOC);
-                $recipientEmail = $email_to ?: ($customerRow['customers_email'] ?? null);
+                // Always use stored customer email; do not require manual input
+                $recipientEmail = $customerRow['customers_email'] ?? null;
 
                 // Fetch payment method name for display
                 $pmStmt = $conn->prepare("SELECT payment_method_name FROM tbl_payment_method WHERE payment_method_id = :pmid");
@@ -686,18 +687,13 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#2b2b2b; ba
 
 
 
-                // Send email if requested
+                // Prepare email status; combined email will be sent after PDF generation
                 $email_status = null;
-                if (in_array($delivery_mode, ['email', 'both']) && $recipientEmail) {
-                    include_once __DIR__ . '/send_email.php';
-                    $mailer = new SendEmail();
-                    $subject = 'Demiren Hotel — Invoice #' . $invoice_id;
-                    $email_status = $mailer->sendEmail($recipientEmail, $subject, $invoiceHtml) ? 'sent' : 'failed';
-                }
 
-                // Generate PDF if requested
+                // Generate PDF if requested or needed for email attachment
                 $pdf_url = null;
-                if (in_array($delivery_mode, ['pdf', 'both'])) {
+                $pdfPath = null;
+                if (in_array($delivery_mode, ['pdf', 'both', 'email'])) {
                     try {
                         // Try autoload from local vendor, project root vendor, then packaged dompdf
                         $localAutoload = __DIR__ . '/vendor/autoload.php';
@@ -758,6 +754,83 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#2b2b2b; ba
                     }
                 }
 
+                // Send a Thank You email with the invoice PDF attached, if enabled
+                $thank_you_status = null;
+                if (in_array($delivery_mode, ['email', 'both']) && $recipientEmail) {
+                    try {
+                        // Load PHPMailer via Composer autoload
+                        $localAutoload = __DIR__ . '/vendor/autoload.php';
+                        if (file_exists($localAutoload)) {
+                            require_once $localAutoload;
+                        }
+                        // Use fully-qualified class names to avoid namespace issues
+                        $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
+                        // Match SMTP settings to SendEmail helper
+                        $mail->SMTPDebug = \PHPMailer\PHPMailer\SMTP::DEBUG_OFF;
+                        $mail->Debugoutput = function ($str, $level) {
+                            @file_put_contents(__DIR__ . '/email_debug.log', '[' . date('c') . "] SMTP Debug (level {$level}): " . $str . "\n", FILE_APPEND);
+                        };
+                        $mail->isSMTP();
+                        $mail->Host       = 'smtp.gmail.com';
+                        $mail->SMTPAuth   = true;
+                        $mail->Username   = 'ikversoza@gmail.com';
+                        $mail->Password   = 'izpfukocrjngaogg';
+                        $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+                        $mail->Port       = 587;
+                        $mail->Timeout    = 10;
+                        @ini_set('default_socket_timeout', 10);
+                        $mail->CharSet    = 'UTF-8';
+
+                        $mail->setFrom('ikversoza@gmail.com', 'Demiren Hotel');
+                        $mail->addAddress($recipientEmail, $customerRow['customer_fullname'] ?? 'Guest');
+                        $mail->isHTML(true);
+                        $mail->Subject = 'Demiren Hotel — Invoice #' . $invoice_id;
+                        $guestName = htmlspecialchars($customerRow['customer_fullname'] ?? 'Guest');
+                        $hotelName = 'Demiren Hotel & Restaurant';
+                        $cityName = 'Iligan City';
+                        $senderName = 'Demiren Hotel Team';
+                        $senderPosition = 'Front Desk';
+                        $emailBody = '<div style="font-family:Arial,Helvetica,sans-serif;color:#111827;line-height:1.6">'
+                            . '<p>Dear ' . $guestName . ',</p>'
+                            . '<p>Warm greetings from ' . $hotelName . '!</p>'
+                            . '<p>We would like to sincerely thank you for choosing to stay with us during your recent visit to ' . $cityName . '. It was truly our pleasure to have you as our guest.</p>'
+                            . '<p>We hope you had a comfortable and enjoyable experience — from our rooms to our amenities and service. Your satisfaction is very important to us, and we would love to hear your feedback to help us serve you even better next time.</p>'
+                            . '<p>If your travels bring you back to ' . $cityName . ', we’d be delighted to welcome you again. Please don’t hesitate to contact us directly for any future reservations or special requests.</p>'
+                            . '<p>Thank you once again for staying with ' . $hotelName . '. We wish you safe travels and look forward to seeing you soon!</p>'
+                            . '<p>Warm regards,<br>' . $senderName . '<br>' . $senderPosition . '<br>' . $hotelName . '</p>'
+                            . '<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" />'
+                            . '<p><strong>Customer Information</strong><br>'
+                            . 'Name: ' . $guestName . '<br>'
+                            . 'Email: ' . htmlspecialchars($customerRow['customers_email'] ?? '-') . '<br>'
+                            . 'Reference No: ' . htmlspecialchars($refNo) . '</p>'
+                            . '<p>Your invoice is attached as a PDF.</p>'
+                            . '</div>';
+                        $mail->Body    = $emailBody;
+                        $mail->AltBody = 'Dear ' . ($customerRow['customer_fullname'] ?? 'Guest') . "\n\n"
+                            . 'Warm greetings from ' . $hotelName . "!\n\n"
+                            . 'We would like to sincerely thank you for choosing to stay with us during your recent visit to ' . $cityName . '. It was truly our pleasure to have you as our guest.' . "\n\n"
+                            . 'We hope you had a comfortable and enjoyable experience — from our rooms to our amenities and service. Your satisfaction is very important to us, and we would love to hear your feedback to help us serve you even better next time.' . "\n\n"
+                            . 'If your travels bring you back to ' . $cityName . ', we’d be delighted to welcome you again. Please don’t hesitate to contact us directly for any future reservations or special requests.' . "\n\n"
+                            . 'Thank you once again for staying with ' . $hotelName . '. We wish you safe travels and look forward to seeing you soon!' . "\n\n"
+                            . 'Warm regards,' . "\n" . $senderName . "\n" . $senderPosition . "\n" . $hotelName . "\n\n"
+                            . 'Customer Information' . "\n"
+                            . 'Name: ' . ($customerRow['customer_fullname'] ?? 'Guest') . "\n"
+                            . 'Email: ' . ($customerRow['customers_email'] ?? '-') . "\n"
+                            . 'Reference No: ' . $refNo . "\n\n"
+                            . 'Your invoice is attached as a PDF.';
+                        if ($pdfPath && file_exists($pdfPath)) {
+                            $mail->addAttachment($pdfPath, 'invoice.pdf');
+                        }
+                        $mail->send();
+                        $email_status = 'sent';
+                        $thank_you_status = $email_status; // backward compatibility
+                    } catch (\Throwable $e) {
+                        @file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . 'email_debug.log', date('c') . " combined email exception: " . $e->getMessage() . "\n", FILE_APPEND);
+                        $email_status = 'failed';
+                        $thank_you_status = $email_status; // backward compatibility
+                    }
+                }
+
                 // 6. Update room status to Vacant (3) for check-out
                 $roomUpdateStmt = $conn->prepare("
                     UPDATE tbl_rooms 
@@ -786,7 +859,8 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#2b2b2b; ba
                     "status" => "success",
                     "breakdown" => $billingBreakdown,
                     "email_status" => $email_status,
-                    "pdf_url" => $pdf_url
+                    "pdf_url" => $pdf_url,
+                    "thank_you_status" => $thank_you_status
                 ];
             }
 
@@ -1446,10 +1520,11 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#2b2b2b; ba
             b.booking_checkin_dateandtime,
             b.booking_checkout_dateandtime,
             b.booking_created_at,
-            -- Customer info
-            CONCAT(c.customers_fname, ' ', c.customers_lname) AS customer_name,
-            c.customers_email AS customer_email,
-            c.customers_phone AS customer_phone,
+            -- Customer info (supports registered and walk-in)
+            COALESCE(CONCAT(c.customers_fname, ' ', c.customers_lname),
+                     CONCAT(w.customers_walk_in_fname, ' ', w.customers_walk_in_lname)) AS customer_name,
+            COALESCE(c.customers_email, w.customers_walk_in_email) AS customer_email,
+            COALESCE(c.customers_phone, w.customers_walk_in_phone) AS customer_phone,
             -- Enhanced balance calculation
             CASE 
                 WHEN latest_billing.billing_id IS NOT NULL THEN
@@ -1490,6 +1565,7 @@ body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color:#2b2b2b; ba
             END AS billing_status
         FROM tbl_booking b
         LEFT JOIN tbl_customers c ON b.customers_id = c.customers_id
+        LEFT JOIN tbl_customers_walk_in w ON b.customers_walk_in_id = w.customers_walk_in_id
         LEFT JOIN (
             SELECT bh1.booking_id, bs.booking_status_name
             FROM tbl_booking_history bh1
