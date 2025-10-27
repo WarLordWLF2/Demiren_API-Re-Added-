@@ -546,17 +546,6 @@ class Admin_Functions
                 $checkin = date('Y-m-d H:i:s');
             }
 
-            // Prevent duplicate active visitor log for same person and room (no checkout yet)
-            $dup = $conn->prepare("SELECT 1 FROM tbl_visitorlogs WHERE booking_room_id = :booking_room_id AND LOWER(visitorlogs_visitorname) = LOWER(:name) AND visitorlogs_checkout_time IS NULL LIMIT 1");
-            $dup->bindParam(':booking_room_id', $booking_room_id, PDO::PARAM_INT);
-            $dup->bindParam(':name', $name);
-            $dup->execute();
-            if ($dup->fetch(PDO::FETCH_ASSOC)) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'response' => false, 'message' => 'Duplicate active visitor log']);
-                return;
-            }
-
             $sql = "INSERT INTO tbl_visitorlogs (visitorapproval_id, booking_room_id, employee_id, visitorlogs_visitorname, visitorlogs_purpose, visitorlogs_checkin_time) VALUES (:statusId, :booking_room_id, :employee_id, :name, :purpose, :checkin)";
             $stmt = $conn->prepare($sql);
             if ($statusId !== null && $statusId > 0) {
@@ -634,81 +623,6 @@ class Admin_Functions
         $stmt = $conn->prepare("SELECT r.roomnumber_id, r.roomfloor, rt.roomtype_id, rt.roomtype_name, rt.roomtype_price, rt.roomtype_description, rt.roomtype_capacity, rt.roomtype_beds, st.status_name, r.room_status_id FROM tbl_rooms r INNER JOIN tbl_roomtype rt ON rt.roomtype_id = r.roomtype_id INNER JOIN tbl_status_types st ON st.status_id = r.room_status_id ORDER BY r.roomnumber_id ASC");
         $stmt->execute();
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
-    }
-
-    // Create one or multiple physical room numbers under a room type
-    function addRoomNumbers($json)
-    {
-        include "connection.php";
-        try {
-            $data = is_string($json) ? json_decode($json, true) : (is_array($json) ? $json : []);
-
-            $roomtype_id   = intval($data['roomtype_id'] ?? 0);
-            $room_status_id = intval($data['room_status_id'] ?? 3); // default Vacant
-            $room_floor    = intval($data['room_floor'] ?? 0);
-            $room_numbers  = $data['room_numbers'] ?? [];
-
-            if ($roomtype_id <= 0) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'message' => 'Invalid room type']);
-                return;
-            }
-            if ($room_status_id <= 0) { $room_status_id = 3; }
-            if ($room_floor < 0) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'message' => 'Room floor must be non-negative']);
-                return;
-            }
-            if (!is_array($room_numbers) || count($room_numbers) === 0) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'message' => 'No room numbers provided']);
-                return;
-            }
-
-            // Validate room type exists
-            $chkRt = $conn->prepare("SELECT roomtype_id FROM tbl_roomtype WHERE roomtype_id = :rt LIMIT 1");
-            $chkRt->bindParam(':rt', $roomtype_id, PDO::PARAM_INT);
-            $chkRt->execute();
-            if ($chkRt->rowCount() === 0) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(['success' => false, 'message' => 'Room type not found']);
-                return;
-            }
-
-            $created = [];
-            $duplicates = [];
-
-            $conn->beginTransaction();
-            $existsStmt = $conn->prepare("SELECT roomnumber_id FROM tbl_rooms WHERE roomnumber_id = :rn LIMIT 1");
-            $insertStmt = $conn->prepare("INSERT INTO tbl_rooms (roomnumber_id, roomtype_id, room_status_id, roomfloor) VALUES (:rn, :rt, :rs, :rf)");
-
-            foreach ($room_numbers as $num) {
-                $rn = intval($num);
-                if ($rn <= 0) { continue; }
-
-                $existsStmt->execute([':rn' => $rn]);
-                if ($existsStmt->rowCount() > 0) {
-                    $duplicates[] = $rn;
-                    continue;
-                }
-
-                $ok = $insertStmt->execute([':rn' => $rn, ':rt' => $roomtype_id, ':rs' => $room_status_id, ':rf' => $room_floor]);
-                if ($ok) { $created[] = $rn; }
-            }
-            $conn->commit();
-
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode([
-                'success' => true,
-                'created' => $created,
-                'duplicates' => $duplicates,
-                'message' => empty($duplicates) ? 'Rooms created' : 'Some rooms skipped (duplicates)'
-            ]);
-        } catch (Exception $e) {
-            if ($conn && $conn->inTransaction()) { $conn->rollBack(); }
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode(['success' => false, 'message' => 'Error creating rooms']);
-        }
     }
 
     // Returns room type master data with image filenames for admin UI
@@ -826,7 +740,6 @@ class Admin_Functions
                         cc.charges_category_name
                     FROM tbl_charges_master cm
                     LEFT JOIN tbl_charges_category cc ON cc.charges_category_id = cm.charges_category_id
-                    WHERE COALESCE(cm.charge_isDisabled, 0) = 0
                     ORDER BY cc.charges_category_name ASC, cm.charges_master_name ASC";
             $stmt = $conn->prepare($sql);
             $stmt->execute();
@@ -914,23 +827,7 @@ class Admin_Functions
         include "connection.php";
         try {
             $json = json_decode($_POST['json'], true);
-            $amenity_name = isset($json['amenity_name']) ? trim($json['amenity_name']) : '';
-
-            if ($amenity_name === '') {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(0);
-                return;
-            }
-
-            // Prevent duplicate amenity names (case-insensitive)
-            $check = $conn->prepare("SELECT 1 FROM tbl_room_amenities_master WHERE LOWER(room_amenities_master_name) = LOWER(:name) LIMIT 1");
-            $check->bindParam(':name', $amenity_name);
-            $check->execute();
-            if ($check->fetch(PDO::FETCH_ASSOC)) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(0);
-                return;
-            }
+            $amenity_name = $json['amenity_name'];
             
             $sql = "INSERT INTO tbl_room_amenities_master (room_amenities_master_name) VALUES (?)";
             $stmt = $conn->prepare($sql);
@@ -990,28 +887,11 @@ class Admin_Functions
         include "connection.php";
         try {
             $json = json_decode($_POST['json'], true);
-            $charge_category = isset($json['charge_category']) ? intval($json['charge_category']) : 0;
-            $charge_name = isset($json['charge_name']) ? trim($json['charge_name']) : '';
+            $charge_category = $json['charge_category'];
+            $charge_name = $json['charge_name'];
             $charge_price = $json['charge_price'];
             $charge_description = $json['charge_description'] ?? '';
             $charge_is_restricted = $json['charge_is_restricted'] ?? 0;
-
-            if ($charge_category <= 0 || $charge_name === '') {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(0);
-                return;
-            }
-
-            // Prevent duplicate charge name within same category (case-insensitive)
-            $check = $conn->prepare("SELECT 1 FROM tbl_charges_master WHERE charges_category_id = :cat AND LOWER(charges_master_name) = LOWER(:name) LIMIT 1");
-            $check->bindParam(':cat', $charge_category, PDO::PARAM_INT);
-            $check->bindParam(':name', $charge_name, PDO::PARAM_STR);
-            $check->execute();
-            if ($check->fetch(PDO::FETCH_ASSOC)) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(0);
-                return;
-            }
             
             $sql = "INSERT INTO tbl_charges_master (charges_category_id, charges_master_name, charges_master_price, charges_master_description, charge_name_isRestricted, charges_master_status_id) 
                     VALUES (?, ?, ?, ?, ?, 1)";
@@ -1064,7 +944,7 @@ class Admin_Functions
             $charges_master_id = $json['charges_master_id'];
             
             // Set status to inactive instead of deleting
-            $sql = "UPDATE tbl_charges_master SET charge_isDisabled = 1 WHERE charges_master_id = ?";
+            $sql = "UPDATE tbl_charges_master SET charges_master_status_id = 0 WHERE charges_master_id = ?";
             $stmt = $conn->prepare($sql);
             $result = $stmt->execute([$charges_master_id]);
             
@@ -1076,61 +956,12 @@ class Admin_Functions
         }
     }
 
-    // Enable a previously hidden charge
-    function enableCharges()
-    {
-        include "connection.php";
-        try {
-            $json = json_decode($_POST['json'], true);
-            $charges_master_id = $json['charges_master_id'];
-
-            $sql = "UPDATE tbl_charges_master SET charge_isDisabled = 0 WHERE charges_master_id = ?";
-            $stmt = $conn->prepare($sql);
-            $result = $stmt->execute([$charges_master_id]);
-
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode($result ? 1 : 0);
-        } catch (Exception $e) {
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode(0);
-        }
-    }
-
-    // View ALL charges including hidden ones (for admin toggle)
-    function viewChargesAll()
-    {
-        include "connection.php";
-        try {
-            $sql = "SELECT 
-                        cm.charges_master_id,
-                        cm.charges_master_name,
-                        cm.charges_master_price,
-                        cm.charges_master_description,
-                        cm.charge_name_isRestricted,
-                        COALESCE(cm.charges_master_status_id, 1) AS charges_master_status_id,
-                        COALESCE(cm.charge_isDisabled, 0) AS charge_isDisabled,
-                        cc.charges_category_id,
-                        cc.charges_category_name
-                    FROM tbl_charges_master cm
-                    LEFT JOIN tbl_charges_category cc ON cc.charges_category_id = cm.charges_category_id
-                    ORDER BY cc.charges_category_name ASC, cm.charges_master_name ASC";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode($rows);
-        } catch (Exception $e) {
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode([]);
-        }
-    }
-
     // New: Discount Management Methods
     function viewDiscounts()
     {
         include "connection.php";
         try {
-            $sql = "SELECT discounts_id, discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in FROM tbl_discounts WHERE COALESCE(discount_isDisabled, 0) = 0 ORDER BY discounts_name ASC";
+            $sql = "SELECT discounts_id, discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in FROM tbl_discounts ORDER BY discounts_name ASC";
             $stmt = $conn->prepare($sql);
             $stmt->execute();
             $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1147,7 +978,7 @@ class Admin_Functions
         include "connection.php";
         try {
             $json = json_decode($_POST['json'], true);
-            $discountName = isset($json['discountName']) ? trim($json['discountName']) : null;
+            $discountName = $json['discountName'] ?? null;
             $discountPercentage = (isset($json['discountPercentage']) && $json['discountPercentage'] !== '') ? floatval($json['discountPercentage']) : null;
             $discountAmount = (isset($json['discountAmount']) && $json['discountAmount'] !== '') ? intval($json['discountAmount']) : null;
             $discountDescription = $json['discountDescription'] ?? null;
@@ -1160,17 +991,7 @@ class Admin_Functions
                 return;
             }
 
-            // Prevent duplicate discount name (case-insensitive)
-            $check = $conn->prepare("SELECT 1 FROM tbl_discounts WHERE LOWER(discounts_name) = LOWER(:name) LIMIT 1");
-            $check->bindParam(':name', $discountName, PDO::PARAM_STR);
-            $check->execute();
-            if ($check->fetch(PDO::FETCH_ASSOC)) {
-                if (ob_get_length()) { ob_clean(); }
-                echo json_encode(0);
-                return;
-            }
-
-            $sql = "INSERT INTO tbl_discounts (discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in, discount_isDisabled) VALUES (?, ?, ?, ?, ?, ?, 0)";
+            $sql = "INSERT INTO tbl_discounts (discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in) VALUES (?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
             $result = $stmt->execute([$discountName, $discountPercentage, $discountAmount, $discountDescription, $discountStartIn, $discountEndsIn]);
             
@@ -1214,7 +1035,7 @@ class Admin_Functions
             $json = json_decode($_POST['json'], true);
             $discount_id = $json['discount_id'];
             
-            $sql = "UPDATE tbl_discounts SET discount_isDisabled = 1 WHERE discounts_id = ?";
+            $sql = "DELETE FROM tbl_discounts WHERE discounts_id = ?";
             $stmt = $conn->prepare($sql);
             $result = $stmt->execute([$discount_id]);
             
@@ -1223,41 +1044,6 @@ class Admin_Functions
         } catch (Exception $e) {
             if (ob_get_length()) { ob_clean(); }
             echo json_encode(0);
-        }
-    }
-
-    function enableDiscounts()
-    {
-        include "connection.php";
-        try {
-            $json = json_decode($_POST['json'], true);
-            $discount_id = $json['discount_id'];
-            
-            $sql = "UPDATE tbl_discounts SET discount_isDisabled = 0 WHERE discounts_id = ?";
-            $stmt = $conn->prepare($sql);
-            $result = $stmt->execute([$discount_id]);
-            
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode($result ? 1 : 0);
-        } catch (Exception $e) {
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode(0);
-        }
-    }
-
-    function viewDiscountsAll()
-    {
-        include "connection.php";
-        try {
-            $sql = "SELECT discounts_id, discounts_name, discounts_percentage, discounts_amount, discounts_description, discount_start_in, discount_ends_in, COALESCE(discount_isDisabled, 0) AS discount_isDisabled FROM tbl_discounts ORDER BY discounts_name ASC";
-            $stmt = $conn->prepare($sql);
-            $stmt->execute();
-            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode($rows);
-        } catch (Exception $e) {
-            if (ob_get_length()) { ob_clean(); }
-            echo json_encode([]);
         }
     }
 
@@ -2295,7 +2081,6 @@ class Admin_Functions
             $sql = "SELECT cm.charges_master_id, cm.charges_category_id, cm.charges_master_name, cm.charges_master_price, cm.charges_master_description, cc.charges_category_name
                     FROM tbl_charges_master cm
                     LEFT JOIN tbl_charges_category cc ON cc.charges_category_id = cm.charges_category_id
-                    WHERE COALESCE(cm.charge_isDisabled, 0) = 0
                     ORDER BY cc.charges_category_name ASC, cm.charges_master_name ASC";
             $stmt = $conn->prepare($sql);
             $stmt->execute();
@@ -2702,9 +2487,6 @@ switch ($method) {
     case 'updateRoomType':
         $admin->updateRoomType($json);
         break;
-    case 'addRoomNumbers':
-        $admin->addRoomNumbers($json);
-        break;
     case 'viewCharges':
         $admin->viewCharges();
         break;
@@ -2738,12 +2520,6 @@ switch ($method) {
     case 'disableCharges':
         $admin->disableCharges();
         break;
-    case 'enableCharges':
-        $admin->enableCharges();
-        break;
-    case 'viewChargesAll':
-        $admin->viewChargesAll();
-        break;
     // Discount management routes
     case 'viewDiscounts':
         $admin->viewDiscounts();
@@ -2757,15 +2533,6 @@ switch ($method) {
     case 'disableDiscounts':
         $admin->disableDiscounts();
         break;
-
-    case 'enableDiscounts':
-        $admin->enableDiscounts();
-        break;
-
-    case 'viewDiscountsAll':
-        $admin->viewDiscountsAll();
-        break;
-        
     case 'viewBookingsEnhanced':
         $admin->viewBookingsEnhanced();
         break;

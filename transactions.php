@@ -583,8 +583,14 @@ class Transactions
                 $customerStmt->bindParam(':booking_id', $booking_id, PDO::PARAM_INT);
                 $customerStmt->execute();
                 $customerRow = $customerStmt->fetch(PDO::FETCH_ASSOC);
-                // Always use stored customer email; do not require manual input
-                $recipientEmail = $customerRow['customers_email'] ?? null;
+                // Prefer override from request; fall back to stored customer email
+                $recipientEmail = null;
+                if (!empty($email_to)) {
+                    $recipientEmail = trim($email_to);
+                }
+                if (!$recipientEmail) {
+                    $recipientEmail = $customerRow['customers_email'] ?? null;
+                }
 
                 // Fetch payment method name for display
                 $pmStmt = $conn->prepare("SELECT payment_method_name FROM tbl_payment_method WHERE payment_method_id = :pmid");
